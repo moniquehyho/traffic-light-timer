@@ -79,7 +79,8 @@
     text-align: center;
   }
   .pair.show { display: flex; }
-  .pair img { width: 110px; height: 110px; background: #fff; padding: 6px; border-radius: 6px; }
+  #qr { width: 110px; height: 110px; background: #fff; padding: 6px; border-radius: 6px; }
+  #qr svg { display: block; width: 100%; height: 100%; }
   .pair small { color: #aaa; word-break: break-all; }
 
   .history {
@@ -96,6 +97,8 @@
   .history th { color: #aaa; font-weight: 500; }
   .history .empty { color: #888; padding: 6px 4px; }
 </style>
+<script src="https://cdn.jsdelivr.net/npm/peerjs@1.5.4/dist/peerjs.min.js"></script>
+<script src="https://cdn.jsdelivr.net/npm/qrcode-generator@1.4.4/qrcode.min.js"></script>
 </head>
 <body>
   <main>
@@ -121,15 +124,9 @@
   </div>
 
   <div class="pair" id="pair">
-    <div id="pairInfo" hidden>
-      <div>Scan to watch the timer on your phone</div>
-      <img id="qr" alt="QR code for the phone view">
-      <div><small id="phoneUrl"></small></div>
-    </div>
-    <div id="pairHint" hidden>
-      <div>Phone pairing is off</div>
-      <small>Double-click <b>start-timer.bat</b> and the QR code will appear here.</small>
-    </div>
+    <div>Scan to watch the timer on your phone</div>
+    <div id="qr" role="img" aria-label="QR code for the phone view"></div>
+    <small id="pairStatus">Setting up pairing…</small>
   </div>
 
   <div class="history">
@@ -195,46 +192,75 @@
       .join('');
   }
 
-  // Talk to the local server (server.py) so a paired phone can follow along. Works whether this
-  // page was served by it or opened straight from the file.
-  const API = location.protocol.startsWith('http') ? '' : 'http://localhost:8000';
-  // On a hosted copy (e.g. GitHub Pages) there is no server.py, so don't keep retrying.
-  const localCopy = !location.protocol.startsWith('http') ||
-    ['localhost', '127.0.0.1'].includes(location.hostname) || /^192\.168\.|^10\./.test(location.hostname);
-  let paired = false;
+  // Phone pairing: phones connect straight to this page over WebRTC (PeerJS). PeerJS's free
+  // public server only introduces the two devices; timer updates go device to device.
+  const PEER_ID_KEY = 'trafficLightTimerPeerId';
+  const PHONE_PAGE = location.hostname.endsWith('github.io')
+    ? new URL('remote.html', location.href).href
+    : 'https://moniquehyho.github.io/traffic-light-timer/remote.html';
+  const pairEl = document.getElementById('pair');
+  const pairStatusEl = document.getElementById('pairStatus');
+  const phones = new Set();
+  let peer = null;
+
+  function stateMessage() {
+    return { running: !!startedAt, elapsedMs: elapsed(), triggers };
+  }
   function syncPhone() {
-    if (!paired) return;
-    fetch(API + '/api/state', {
-      method: 'POST',
-      headers: { 'Content-Type': 'text/plain' },  // plain text avoids a CORS preflight
-      body: JSON.stringify({ running: !!startedAt, elapsedMs: elapsed(), triggers }),
-    }).catch(() => {});
+    const msg = stateMessage();
+    phones.forEach(conn => { if (conn.open) conn.send(msg); });
   }
 
-  const pairEl = document.getElementById('pair');
-  const pairInfoEl = document.getElementById('pairInfo');
-  const pairHintEl = document.getElementById('pairHint');
-  function connectPhone() {
-    fetch(API + '/api/info').then(r => r.json()).then(info => {
-      paired = true;
-      document.getElementById('qr').src = API + '/api/qr.svg';
-      document.getElementById('phoneUrl').textContent = info.phoneUrl;
-      pairHintEl.hidden = true;
-      pairInfoEl.hidden = false;
-      syncPhone();
-    }).catch(() => {
-      pairInfoEl.hidden = true;
-      pairHintEl.hidden = false;
-      if (localCopy) {
-        setTimeout(connectPhone, 3000);  // keep trying, so the QR appears once start-timer.bat runs
-      } else {
-        pairHintEl.querySelector('small').innerHTML =
-          'To pair a phone, run <b>start-timer.bat</b> on your laptop instead of this web link.';
+  function showPhoneCount() {
+    pairStatusEl.textContent = phones.size
+      ? `${phones.size} phone${phones.size > 1 ? 's' : ''} connected`
+      : 'No phones connected';
+  }
+
+  function newPeerId() {
+    return 'tlt-' + Array.from(crypto.getRandomValues(new Uint8Array(8)), b => (b % 36).toString(36)).join('');
+  }
+
+  function startPairing(id, attempt = 0) {
+    if (typeof Peer === 'undefined' || typeof qrcode === 'undefined') {
+      pairStatusEl.textContent = 'Phone pairing needs an internet connection.';
+      return;
+    }
+    peer = new Peer(id);
+    peer.on('open', peerId => {
+      localStorage.setItem(PEER_ID_KEY, peerId);  // same QR after a reload, so phones reconnect
+      const qr = qrcode(0, 'M');
+      qr.addData(`${PHONE_PAGE}?id=${peerId}`);
+      qr.make();
+      document.getElementById('qr').innerHTML = qr.createSvgTag({ cellSize: 4, margin: 0, scalable: true });
+      showPhoneCount();
+    });
+    peer.on('connection', conn => {
+      conn.on('open', () => {
+        phones.add(conn);
+        conn.send(stateMessage());
+        showPhoneCount();
+      });
+      conn.on('close', () => { phones.delete(conn); showPhoneCount(); });
+      conn.on('error', () => { phones.delete(conn); showPhoneCount(); });
+    });
+    peer.on('disconnected', () => setTimeout(() => peer.reconnect(), 2000));
+    peer.on('error', err => {
+      if (err.type === 'unavailable-id') {
+        // Right after a reload the old code can take a few seconds to free up, so retry it a few
+        // times; if it's still taken (e.g. the timer is open in another tab), pick a new one.
+        peer.destroy();
+        if (attempt < 3) setTimeout(() => startPairing(id, attempt + 1), 3000);
+        else startPairing(newPeerId());
+      } else if (['network', 'server-error', 'socket-error', 'socket-closed'].includes(err.type)) {
+        pairStatusEl.textContent = 'Can’t reach the pairing service. Retrying…';
       }
     });
   }
+
   pairEl.classList.add('show');
-  connectPhone();
+  startPairing(localStorage.getItem(PEER_ID_KEY) || newPeerId());
+  setInterval(syncPhone, 5000);  // regular refresh keeps phones in step
 
   function start() {
     if (startedAt) return;
