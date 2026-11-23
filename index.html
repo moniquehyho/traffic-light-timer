@@ -75,7 +75,7 @@
 </style>
 <script src="https://cdn.jsdelivr.net/npm/peerjs@1.5.4/dist/peerjs.min.js"></script>
 <script src="https://cdn.jsdelivr.net/npm/qrcode-generator@1.4.4/qrcode.min.js"></script>
-<script src="timer-core.js?v=5"></script>
+<script src="timer-core.js?v=6"></script>
 </head>
 <body title="Double-click for full screen">
   <div class="corner">
@@ -126,7 +126,7 @@
 
   panelBtn.addEventListener('click', () => {
     const show = panelFrame.hidden;
-    if (show && !panelFrame.src) panelFrame.src = 'remote.html?embed&v=6';
+    if (show && !panelFrame.src) panelFrame.src = 'remote.html?embed&v=7';
     panelFrame.hidden = !show;
     panelBtn.textContent = show ? 'Hide panel' : 'Show full panel';
     panelBtn.setAttribute('aria-expanded', show);

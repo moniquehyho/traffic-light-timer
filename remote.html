@@ -6,6 +6,7 @@
 <title>Timer Control</title>
 <style>
   * { box-sizing: border-box; }
+  [hidden] { display: none !important; }
   body {
     margin: 0;
     min-height: 100vh;
@@ -69,6 +70,8 @@
   .field { display: grid; grid-template-columns: 1fr 96px 48px; gap: 8px; align-items: center; font-size: 0.95rem; }
   .field input[type="number"] { width: 100%; padding: 10px; }
   input[type="color"] { width: 48px; height: 44px; padding: 3px; cursor: pointer; }
+  .swatch { width: 48px; height: 44px; border-radius: 10px; border: 1.5px solid rgba(255, 255, 255, 0.6); }
+  .note { font-size: 0.9rem; opacity: 0.9; }
   .field input.invalid { border-color: #ff6b6b; box-shadow: 0 0 0 1.5px #ff6b6b; }
   .error { color: #ffb3b3; font-size: 0.9rem; }
 
@@ -84,6 +87,7 @@
   .palettes button.active { border-color: #fff; box-shadow: 0 0 0 1.5px #fff; background: rgba(255, 255, 255, 0.3); }
   .dot { box-shadow: 0 0 0 1px rgba(255, 255, 255, 0.7); }
   .dot { width: 14px; height: 14px; border-radius: 50%; }
+  .dots { display: inline-flex; gap: 3px; }
 
   .section-head { display: flex; justify-content: space-between; align-items: center; margin-bottom: 4px; }
   .section-head h2 { margin: 0; font-size: 0.95rem; font-weight: 600; }
@@ -103,12 +107,12 @@
   body.embed input, body.embed button { font-size: 0.95rem; padding: 8px; }
   body.embed .buttons button { padding-left: 2px; padding-right: 2px; }
   body.embed .field { grid-template-columns: 1fr 72px 40px; font-size: 0.9rem; }
-  body.embed input[type="color"] { width: 40px; height: 36px; padding: 2px; }
+  body.embed input[type="color"], body.embed .swatch { width: 40px; height: 36px; padding: 2px; }
   body.embed .palettes button { padding: 6px 8px; font-size: 0.8rem; }
   body.embed .history table { font-size: 0.85rem; }
 </style>
 <script src="https://cdn.jsdelivr.net/npm/peerjs@1.5.4/dist/peerjs.min.js"></script>
-<script src="timer-core.js?v=5"></script>
+<script src="timer-core.js?v=6"></script>
 </head>
 <body>
   <div class="hero">
@@ -129,22 +133,17 @@
   </div>
 
   <div class="panel setup-panel">
-    <div class="fields setup">
-      <div class="field"><label for="greenMins">Green at (min)</label>
-        <input type="number" id="greenMins" min="0" step="any" inputmode="decimal" value="5">
-        <input type="color" id="greenColour" aria-label="Green colour"></div>
-      <div class="field"><label for="amberMins">Amber at (min)</label>
-        <input type="number" id="amberMins" min="0" step="any" inputmode="decimal" value="6">
-        <input type="color" id="amberColour" aria-label="Amber colour"></div>
-      <div class="field"><label for="redMins">Red at (min)</label>
-        <input type="number" id="redMins" min="0" step="any" inputmode="decimal" value="7">
-        <input type="color" id="redColour" aria-label="Red colour"></div>
-      <div id="minutesError" class="error" role="alert" hidden></div>
-    </div>
-
     <div class="setup">
       <div class="section-head"><h2>Screen colours</h2></div>
       <div class="palettes" id="palettes"></div>
+    </div>
+
+    <div class="fields setup">
+      <div class="field" id="countField" hidden><label for="countInput">Number of colours</label>
+        <input type="number" id="countInput" min="1" max="10" step="1" inputmode="numeric"></div>
+      <div id="discoNote" class="note" hidden>The colours keep changing from the moment you press Start – no times needed.</div>
+      <div class="fields" id="rows"></div>
+      <div id="minutesError" class="error" role="alert" hidden></div>
     </div>
 
     <div class="history setup">
@@ -164,7 +163,6 @@
   // Opened by the big screen's "Show full panel" button (inside its page, not on a phone).
   const embedded = new URLSearchParams(location.search).has('embed') && window.parent !== window;
   document.body.classList.toggle('embed', embedded);
-  const KEYS = ['green', 'amber', 'red'];
   const timeEl = document.getElementById('time');
   const statusEl = document.getElementById('status');
   const startBtn = document.getElementById('startBtn');
@@ -172,9 +170,11 @@
   const stopBtn = document.getElementById('stopBtn');
   const resetBtn = document.getElementById('resetBtn');
   const clearBtn = document.getElementById('clearHistoryBtn');
-  const minuteInputs = Object.fromEntries(KEYS.map(k => [k, document.getElementById(k + 'Mins')]));
-  const colourInputs = Object.fromEntries(KEYS.map(k => [k, document.getElementById(k + 'Colour')]));
   const palettesEl = document.getElementById('palettes');
+  const countField = document.getElementById('countField');
+  const countInput = document.getElementById('countInput');
+  const discoNote = document.getElementById('discoNote');
+  const rowsEl = document.getElementById('rows');
   const historyBody = document.getElementById('historyBody');
 
   let state = null;      // latest timer state (from the big screen, or this phone's own timer)
@@ -187,34 +187,84 @@
     renderControls();
   }
 
-  // Remember this phone's last minute settings.
-  const savedMinutes = loadJson(MINUTES_KEY, null);
-  if (savedMinutes) KEYS.forEach(k => { if (savedMinutes[k] != null) minuteInputs[k].value = savedMinutes[k]; });
+  // This phone's minute marks, as typed (one per colour; extras are kept for when a custom
+  // scheme grows again). Older versions saved them as { green, amber, red }.
+  let saved = loadJson(MINUTES_KEY, null);
+  if (saved && !Array.isArray(saved)) saved = [saved.green, saved.amber, saved.red];
+  let minuteText = Array.isArray(saved) ? saved.map(v => (v == null ? '' : String(v))) : ['5', '6', '7'];
 
   function escapeHtml(s) { return String(s).replace(/[&<>"']/g, c => `&#${c.charCodeAt(0)};`); }
 
   // --- Controls ---
 
-  // Check the minutes as they're typed: green before amber before red. Highlights the boxes
-  // to fix and keeps Start off until they're right.
+  function sendSettings(scheme, custom) {
+    send({ cmd: 'colours', settings: { scheme, custom } });
+  }
+
+  // Check the minutes as they're typed: each colour before the next. Highlights the boxes to
+  // fix and keeps Start off until they're right.
   const minutesErrorEl = document.getElementById('minutesError');
   let minutesProblem = null;
   function readMinutes() {
-    return Object.fromEntries(KEYS.map(k => [k, parseFloat(minuteInputs[k].value)]));
+    return minuteText.slice(0, markCount(state.settings)).map(parseFloat);
   }
   function validateMinutes() {
-    minutesProblem = checkMinutes(readMinutes());
-    KEYS.forEach(k => minuteInputs[k].classList.toggle('invalid', !!minutesProblem && minutesProblem.bad.includes(k)));
+    const active = state && (state.running || state.paused);
+    minutesProblem = state && !active ? checkMinutes(readMinutes(), colourNames(state.settings)) : null;
+    rowsEl.querySelectorAll('input[type="number"]').forEach((input, i) =>
+      input.classList.toggle('invalid', !!minutesProblem && minutesProblem.bad.includes(i)));
     minutesErrorEl.hidden = !minutesProblem;
     minutesErrorEl.textContent = minutesProblem ? minutesProblem.message : '';
   }
-  KEYS.forEach(k => minuteInputs[k].addEventListener('input', () => { validateMinutes(); renderControls(); }));
+
+  // One row per colour: its minute mark, and a colour picker (Custom) or a sample (Bright, Dark).
+  let rowsKey = '';
+  function buildRows() {
+    const s = state.settings, n = markCount(s), names = colourNames(s);
+    while (minuteText.length < n) {
+      const last = parseFloat(minuteText[minuteText.length - 1]);
+      minuteText.push(String(Number.isFinite(last) ? last + 1 : minuteText.length + 1));
+    }
+    rowsEl.innerHTML = names.slice(0, n).map((name, i) =>
+      `<div class="field"><label for="mins${i}">${escapeHtml(name)} at (min)</label>` +
+      `<input type="number" id="mins${i}" data-i="${i}" min="0" step="any" inputmode="decimal">` +
+      (s.scheme === 'custom'
+        ? `<input type="color" data-i="${i}" aria-label="${escapeHtml(name)}">`
+        : `<span class="swatch" aria-hidden="true"></span>`) +
+      `</div>`).join('');
+    rowsEl.querySelectorAll('input[type="number"]').forEach((input, i) => { input.value = minuteText[i]; });
+  }
+
+  rowsEl.addEventListener('input', e => {
+    const i = +e.target.dataset.i;
+    if (e.target.type === 'number') {
+      minuteText[i] = e.target.value;
+      validateMinutes();
+      renderControls();
+    } else if (e.target.type === 'color') {
+      const custom = [...state.settings.custom];
+      custom[i] = e.target.value;
+      sendSettings('custom', custom);
+    }
+  });
+
+  countInput.addEventListener('input', () => {
+    const n = Number(countInput.value);
+    const ok = Number.isInteger(n) && n >= 1 && n <= MAX_COLOURS;
+    countInput.classList.toggle('invalid', !ok);
+    if (!ok || !state) return;
+    const custom = state.settings.custom.slice(0, n);
+    const extra = SCHEMES.disco.colours;
+    while (custom.length < n) custom.push(extra[custom.length % extra.length]);
+    sendSettings('custom', custom);
+  });
+  countInput.addEventListener('blur', () => renderControls());  // put back a valid number
 
   startBtn.addEventListener('click', () => {
     validateMinutes();
     if (minutesProblem) return renderControls();
     const minutes = readMinutes();
-    saveJson(MINUTES_KEY, minutes);
+    saveJson(MINUTES_KEY, minuteText.map(v => (v === '' ? null : parseFloat(v))));
     send({ cmd: 'start', minutes });
   });
   pauseBtn.addEventListener('click', () => send({ cmd: state && state.paused ? 'resume' : 'pause' }));
@@ -224,20 +274,16 @@
     if (confirm('Clear the timer history?')) send({ cmd: 'clearHistory' });
   });
 
-  function sendPalette(palette) {
-    send({ cmd: 'palette', palette: { green: palette.green, amber: palette.amber, red: palette.red } });
-  }
-  palettesEl.innerHTML = Object.entries(PALETTES).map(([id, p]) =>
-    `<button type="button" data-palette="${id}">` +
-    KEYS.map(k => `<span class="dot" style="background:${p[k]}"></span>`).join('') +
-    `${p.name}</button>`).join('');
+  // Scheme buttons, each with a few dots of its colours.
+  const dots = colours => colours.slice(0, 5).map(c => `<span class="dot" style="background:${c}"></span>`).join('');
+  palettesEl.innerHTML = Object.entries(SCHEMES).map(([id, p]) =>
+    `<button type="button" data-scheme="${id}"><span class="dots">${dots(p.colours || DEFAULT_SETTINGS.custom)}</span>${p.name}</button>`
+  ).join('');
+  const customDots = palettesEl.querySelector('[data-scheme="custom"] .dots');
   palettesEl.addEventListener('click', e => {
-    const btn = e.target.closest('button[data-palette]');
-    if (btn && !btn.disabled) sendPalette(PALETTES[btn.dataset.palette]);
+    const btn = e.target.closest('button[data-scheme]');
+    if (btn && !btn.disabled && state) sendSettings(btn.dataset.scheme, state.settings.custom);
   });
-  KEYS.forEach(k => colourInputs[k].addEventListener('input', () => {
-    sendPalette(Object.fromEntries(KEYS.map(key => [key, colourInputs[key].value])));
-  }));
 
   function renderControls() {
     const connected = !!state;
@@ -249,6 +295,34 @@
     const compact = running && !embedded;
     if (compact && !document.body.classList.contains('compact')) window.scrollTo(0, 0);
     document.body.classList.toggle('compact', compact);
+
+    if (connected) {
+      const s = state.settings, colours = schemeColours(s);
+      const key = s.scheme + ':' + markCount(s);
+      if (key !== rowsKey) { rowsKey = key; buildRows(); }
+      if (active) {  // show the running timer's minute marks
+        state.triggers.forEach((t, i) => { minuteText[i] = String(+(t / 60000).toFixed(2)); });
+      }
+      rowsEl.querySelectorAll('.field').forEach((row, i) => {
+        const mins = row.querySelector('input[type="number"]');
+        mins.disabled = active;
+        if (active || document.activeElement !== mins) mins.value = minuteText[i];
+        const picker = row.querySelector('input[type="color"]');
+        if (picker && document.activeElement !== picker) picker.value = colours[i];
+        const swatch = row.querySelector('.swatch');
+        if (swatch) swatch.style.background = colours[i];
+      });
+      countField.hidden = s.scheme !== 'custom';
+      countInput.disabled = active;
+      if (document.activeElement !== countInput) {
+        countInput.value = s.custom.length;
+        countInput.classList.remove('invalid');
+      }
+      discoNote.hidden = !SCHEMES[s.scheme].disco;
+      customDots.innerHTML = dots(s.custom);
+    }
+    validateMinutes();
+
     startBtn.disabled = !connected || active || !!minutesProblem;
     pauseBtn.disabled = !active;
     pauseBtn.textContent = paused ? 'Resume' : 'Pause';
@@ -256,16 +330,12 @@
     stopBtn.disabled = !active;
     resetBtn.disabled = !connected;
     clearBtn.disabled = !connected || !state.history || !state.history.length;
-    KEYS.forEach(k => {
-      minuteInputs[k].disabled = !connected || active;
-      if (active) minuteInputs[k].value = +(state.triggers[k] / 60000).toFixed(2);  // the running timer's settings
-      colourInputs[k].disabled = !connected;
-      if (connected && document.activeElement !== colourInputs[k]) colourInputs[k].value = state.palette[k];
-    });
     palettesEl.querySelectorAll('button').forEach(btn => {
-      const p = PALETTES[btn.dataset.palette];
-      btn.disabled = !connected;
-      btn.classList.toggle('active', connected && KEYS.every(k => p[k].toLowerCase() === state.palette[k].toLowerCase()));
+      const id = btn.dataset.scheme;
+      // While a timer is on, only schemes with the same number of minute marks can be picked.
+      btn.disabled = !connected ||
+        (active && markCount({ scheme: id, custom: state.settings.custom }) !== state.triggers.length);
+      btn.classList.toggle('active', connected && state.settings.scheme === id);
     });
 
     const history = (state && state.history) || [];
@@ -337,11 +407,10 @@
     statusEl.textContent = state.running ? ''
       : state.paused ? 'Paused'
       : state.stopped ? 'Stopped – time saved in the history'
-      : 'Ready – set the minutes and press Start';
-    if (!embedded) document.body.style.background = phaseColour(state.running ? phaseAt(elapsed, state.triggers) : null, state.palette);
+      : markCount(state.settings) ? 'Ready – set the minutes and press Start' : 'Ready – press Start';
+    if (!embedded) document.body.style.background = screenColour(elapsed, state.running, state.triggers, state.settings);
   }
 
-  validateMinutes();
   renderControls();
   setInterval(render, 100);
 </script>

@@ -18,6 +18,10 @@ No phone? Click **Show full panel** next to the QR code to open the same control
 
 On a phone, opening the main link goes straight to the control panel and the phone runs the timer on its own screen. Add `?screen` to the link to show the colour screen on any device.
 
-Pick the screen colours on the phone: choose a palette (Bright, Neon, Classic or Deep), or tap the colour square next to each colour to choose your own.
+Pick the screen colours on the phone:
+
+- **Bright** or **Dark**: green, amber and red at the minutes you set.
+- **Disco**: the colours keep changing every second from the moment you press Start. No times needed.
+- **Custom**: choose how many colours you want (1 to 10), then a time and a colour for each. Each colour stays on until the next one, and the last stays on.
 
 Phones connect directly to the timer page over WebRTC using [PeerJS](https://peerjs.com/). PeerJS's free public server only introduces the two devices; the timer updates go device to device. Both devices need internet access, and some strict office networks block this kind of connection.
