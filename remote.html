@@ -19,32 +19,36 @@
 
   .colour-area { flex: 1; min-height: 30vh; }  /* left clear so the colour shows cleanly */
 
+  /* See-through panel: the screen colour shows behind everything, and a soft shadow keeps
+     white text readable on bright colours. */
   .panel {
     display: flex;
     flex-direction: column;
     gap: 14px;
     padding: 14px 16px 20px;
-    background: rgba(20, 20, 26, 0.88);
-    border-radius: 18px 18px 0 0;
+    text-shadow: 0 1px 3px rgba(0, 0, 0, 0.55);
   }
   .clock { text-align: center; }
   #time { font-size: 3rem; font-weight: 600; font-variant-numeric: tabular-nums; line-height: 1.1; }
-  #status { font-size: 0.9rem; color: #bbb; min-height: 1.3em; }
+  #status { font-size: 0.9rem; min-height: 1.3em; }
+  body.compact #time { font-size: 4rem; }
+  body.compact .setup { display: none; }  /* while a timer is on: just the time and buttons */
 
   input, button {
     font: inherit;
     font-size: 1.05rem;
     padding: 12px;
     border-radius: 10px;
-    border: 1px solid #555;
-    background: #2c2c34;
-    color: inherit;
+    border: 1.5px solid rgba(255, 255, 255, 0.6);
+    background: rgba(255, 255, 255, 0.12);
+    color: #fff;
+    text-shadow: inherit;
   }
   input:disabled { opacity: 0.6; }
   button { cursor: pointer; font-weight: 600; }
   button:disabled { opacity: 0.35; cursor: default; }
-  button.primary { background: #2563eb; border-color: #2563eb; }
-  button.stop { background: #b91c1c; border-color: #b91c1c; }
+  button.primary { background: rgba(255, 255, 255, 0.3); border-color: #fff; }
+  button.stop { background: rgba(0, 0, 0, 0.25); border-color: #fff; }
   .buttons { display: grid; grid-template-columns: repeat(3, 1fr); gap: 10px; }
 
   .fields { display: flex; flex-direction: column; gap: 8px; }
@@ -61,16 +65,17 @@
     font-size: 0.85rem;
     font-weight: 500;
   }
-  .palettes button.active { border-color: #fff; box-shadow: 0 0 0 1px #fff; }
+  .palettes button.active { border-color: #fff; box-shadow: 0 0 0 1.5px #fff; background: rgba(255, 255, 255, 0.3); }
+  .dot { box-shadow: 0 0 0 1px rgba(255, 255, 255, 0.7); }
   .dot { width: 14px; height: 14px; border-radius: 50%; }
 
   .section-head { display: flex; justify-content: space-between; align-items: center; margin-bottom: 4px; }
   .section-head h2 { margin: 0; font-size: 0.95rem; font-weight: 600; }
   .section-head button { font-size: 0.85rem; padding: 6px 12px; font-weight: 500; }
   .history table { width: 100%; border-collapse: collapse; font-variant-numeric: tabular-nums; font-size: 0.95rem; }
-  .history th, .history td { text-align: left; padding: 6px 4px; border-bottom: 1px solid rgba(255, 255, 255, 0.12); }
-  .history th { color: #aaa; font-weight: 500; }
-  .history .empty { color: #888; }
+  .history th, .history td { text-align: left; padding: 6px 4px; border-bottom: 1px solid rgba(255, 255, 255, 0.35); }
+  .history th { font-weight: 500; opacity: 0.85; }
+  .history .empty { opacity: 0.75; }
 </style>
 <script src="https://cdn.jsdelivr.net/npm/peerjs@1.5.4/dist/peerjs.min.js"></script>
 <script src="timer-core.js"></script>
@@ -90,7 +95,7 @@
       <button id="resetBtn" disabled>Reset</button>
     </div>
 
-    <div class="fields">
+    <div class="fields setup">
       <div class="field"><label for="greenMins">Green at (min)</label>
         <input type="number" id="greenMins" min="0" step="any" inputmode="decimal" value="5">
         <input type="color" id="greenColour" aria-label="Green colour"></div>
@@ -102,12 +107,12 @@
         <input type="color" id="redColour" aria-label="Red colour"></div>
     </div>
 
-    <div>
+    <div class="setup">
       <div class="section-head"><h2>Screen colours</h2></div>
       <div class="palettes" id="palettes"></div>
     </div>
 
-    <div class="history">
+    <div class="history setup">
       <div class="section-head">
         <h2>Timer history</h2>
         <button id="clearHistoryBtn" disabled>Clear</button>
@@ -186,6 +191,7 @@
   function renderControls() {
     const connected = !!state;
     const active = connected && !!state.triggers;  // running or paused
+    document.body.classList.toggle('compact', active);  // only the time and buttons while a timer is on
     startBtn.disabled = !connected || state.running;
     startBtn.textContent = active && !state.running ? 'Resume' : 'Start';
     stopBtn.disabled = !connected || !state.running;
