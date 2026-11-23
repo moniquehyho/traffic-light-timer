@@ -2,7 +2,6 @@
 // The big screen runs the timer and phones send it commands; a phone opened on its own runs
 // the timer itself with the same code.
 
-const FLASH_MS = 6000;          // how long green and amber show
 const IDLE_COLOUR = '#1e1e24';  // dark grey between colours
 
 const PALETTES = {
@@ -20,11 +19,12 @@ function fmtDuration(ms) {
 }
 function fmtClock(d) { return `${pad(d.getHours())}:${pad(d.getMinutes())}:${pad(d.getSeconds())}`; }
 
+// Each colour stays on from its minute mark until the next colour comes in; red stays on.
 function phaseAt(ms, t) {
   if (!t) return null;
   if (ms >= t.red) return 'red';
-  if (ms >= t.amber && ms < t.amber + FLASH_MS) return 'amber';
-  if (ms >= t.green && ms < t.green + FLASH_MS) return 'green';
+  if (ms >= t.amber) return 'amber';
+  if (ms >= t.green) return 'green';
   return null;
 }
 
@@ -107,7 +107,7 @@ function createTimer() {
     state() {
       return { running: !!startedAt, elapsedMs: elapsed(), triggers, history, palette };
     },
-    // Current screen colour: idle grey unless running and inside a colour's window.
+    // Current screen colour: idle grey until green comes in, or while paused.
     colour() {
       return phaseColour(startedAt ? phaseAt(elapsed(), triggers) : null, palette);
     },

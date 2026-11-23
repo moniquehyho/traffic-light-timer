@@ -2,13 +2,14 @@
 <html lang="en">
 <head>
 <meta charset="UTF-8">
-<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover">
 <title>Timer Control</title>
 <style>
   * { box-sizing: border-box; }
   body {
     margin: 0;
     min-height: 100vh;
+    min-height: 100dvh;  /* the visible height, between the phone's address bar and toolbar */
     font-family: system-ui, -apple-system, "Segoe UI", sans-serif;
     background: #1e1e24;
     color: #f2f2f2;
@@ -25,14 +26,21 @@
     display: flex;
     flex-direction: column;
     gap: 14px;
-    padding: 14px 16px 20px;
+    padding: 14px max(16px, env(safe-area-inset-right)) max(20px, env(safe-area-inset-bottom)) max(16px, env(safe-area-inset-left));
     text-shadow: 0 1px 3px rgba(0, 0, 0, 0.55);
   }
   .clock { text-align: center; }
   #time { font-size: 3rem; font-weight: 600; font-variant-numeric: tabular-nums; line-height: 1.1; }
   #status { font-size: 0.9rem; min-height: 1.3em; }
-  body.compact #time { font-size: 4rem; }
-  body.compact .setup { display: none; }  /* while a timer is on: just the time and buttons */
+
+  /* While a timer is on: just the time and buttons, fitted to the visible screen so nothing
+     needs scrolling, and sized to the phone (smaller on short or landscape screens). */
+  body.compact { height: 100vh; height: 100dvh; overflow: hidden; }
+  body.compact .colour-area { min-height: 0; }
+  body.compact .setup { display: none; }
+  body.compact .panel { padding-bottom: max(6vh, 20px, env(safe-area-inset-bottom)); }
+  body.compact #time { font-size: clamp(2.5rem, min(18vw, 11dvh), 6rem); }
+  body.compact .buttons button { padding: clamp(10px, 2.2dvh, 18px) 12px; font-size: clamp(1rem, 2.4dvh, 1.3rem); }
 
   input, button {
     font: inherit;
@@ -78,7 +86,7 @@
   .history .empty { opacity: 0.75; }
 </style>
 <script src="https://cdn.jsdelivr.net/npm/peerjs@1.5.4/dist/peerjs.min.js"></script>
-<script src="timer-core.js"></script>
+<script src="timer-core.js?v=3"></script>
 </head>
 <body>
   <div class="colour-area"></div>
@@ -191,6 +199,7 @@
   function renderControls() {
     const connected = !!state;
     const active = connected && !!state.triggers;  // running or paused
+    if (active && !document.body.classList.contains('compact')) window.scrollTo(0, 0);
     document.body.classList.toggle('compact', active);  // only the time and buttons while a timer is on
     startBtn.disabled = !connected || state.running;
     startBtn.textContent = active && !state.running ? 'Resume' : 'Start';

@@ -2,7 +2,7 @@
 
 A count-up timer that turns the whole screen green, amber and red at the times you set.
 
-- **Green** and **amber** show for 6 seconds at their minute marks, then the screen goes back to dark grey.
+- The screen turns **green** at its minute mark and stays green until **amber** comes in, then stays amber until **red**.
 - **Red** comes on at its minute mark and stays on until you press Stop or Reset.
 - **Stop** pauses the timer and shows the time. Every stop is saved in the timer history.
 
