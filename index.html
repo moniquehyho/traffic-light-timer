@@ -24,10 +24,41 @@
     overflow: hidden;
   }
 
-  .pair {
+  /* Bottom-right corner: the optional control panel and its button, then the QR code. */
+  .corner {
     position: fixed;
     right: 16px;
     bottom: 16px;
+    display: flex;
+    align-items: flex-end;
+    gap: 10px;
+  }
+  .side { display: flex; flex-direction: column; align-items: flex-end; gap: 8px; }
+  /* See-through like the phone: the screen colour shows behind the panel. */
+  #panelFrame {
+    display: block;
+    width: 300px;
+    height: 0;
+    max-height: calc(100vh - 90px);
+    border: 0;
+    background: transparent;
+    color-scheme: normal;
+  }
+  #panelFrame[hidden] { display: none; }
+  #panelBtn {
+    font: inherit;
+    font-size: 0.8rem;
+    font-weight: 600;
+    padding: 7px 12px;
+    border-radius: 8px;
+    border: 1.5px solid rgba(255, 255, 255, 0.6);
+    background: rgba(255, 255, 255, 0.12);
+    color: #fff;
+    text-shadow: 0 1px 3px rgba(0, 0, 0, 0.55);
+    cursor: pointer;
+    white-space: nowrap;
+  }
+  .pair {
     display: flex;
     flex-direction: column;
     align-items: center;
@@ -47,9 +78,15 @@
 <script src="timer-core.js?v=5"></script>
 </head>
 <body title="Double-click for full screen">
-  <div class="pair">
-    <div id="qr" role="img" aria-label="QR code to control the timer from your phone"></div>
-    <div id="pairStatus">Setting up pairing…</div>
+  <div class="corner">
+    <div class="side">
+      <iframe id="panelFrame" title="Timer control panel" hidden></iframe>
+      <button id="panelBtn" type="button" aria-expanded="false">Show full panel</button>
+    </div>
+    <div class="pair">
+      <div id="qr" role="img" aria-label="QR code to control the timer from your phone"></div>
+      <div id="pairStatus">Setting up pairing…</div>
+    </div>
   </div>
 
 <script>
@@ -77,7 +114,30 @@
   function syncPhones() {
     const msg = timer.state();
     phones.forEach(conn => { if (conn.open) conn.send(msg); });
+    if (panelReady) panelFrame.contentWindow.postMessage({ tlt: 'state', state: msg }, '*');
   }
+
+  // --- "Show full panel": the phone's control panel on this screen, for anyone without a
+  // phone. It's the same page as the phone's, sending its commands here. ---
+
+  const panelFrame = document.getElementById('panelFrame');
+  const panelBtn = document.getElementById('panelBtn');
+  let panelReady = false;
+
+  panelBtn.addEventListener('click', () => {
+    const show = panelFrame.hidden;
+    if (show && !panelFrame.src) panelFrame.src = 'remote.html?embed&v=6';
+    panelFrame.hidden = !show;
+    panelBtn.textContent = show ? 'Hide panel' : 'Show full panel';
+    panelBtn.setAttribute('aria-expanded', show);
+  });
+
+  addEventListener('message', e => {
+    if (e.source !== panelFrame.contentWindow || !e.data) return;
+    if (e.data.tlt === 'ready') { panelReady = true; syncPhones(); }
+    else if (e.data.tlt === 'height') panelFrame.style.height = e.data.h + 'px';
+    else if (e.data.tlt === 'command') handleCommand(e.data.msg);
+  });
 
   function showPhoneCount() {
     pairStatusEl.textContent = phones.size
@@ -134,7 +194,8 @@
 
   setInterval(() => { document.body.style.background = timer.colour(); }, 100);
 
-  document.body.addEventListener('dblclick', () => {
+  document.body.addEventListener('dblclick', e => {
+    if (e.target.closest('.corner')) return;  // not when clicking the panel button
     if (document.fullscreenElement) document.exitFullscreen();
     else document.documentElement.requestFullscreen().catch(() => {});
   });

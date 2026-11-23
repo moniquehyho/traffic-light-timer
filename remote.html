@@ -92,6 +92,20 @@
   .history th, .history td { text-align: left; padding: 6px 4px; border-bottom: 1px solid rgba(255, 255, 255, 0.35); }
   .history th { font-weight: 500; opacity: 0.85; }
   .history .empty { opacity: 0.75; }
+
+  /* Shown inside the big screen's "Show full panel" box: no background of its own (the big
+     screen's colour shows through), no clear colour area, smaller sizes, never minimised. */
+  body.embed { min-height: 0; background: transparent; transition: none; }
+  body.embed .colour-area, body.embed .scroll-hint { display: none; }
+  body.embed .panel { padding: 0 4px; gap: 10px; }
+  body.embed .setup-panel { padding: 10px 4px 4px; }
+  body.embed #time { font-size: 2.2rem; }
+  body.embed input, body.embed button { font-size: 0.95rem; padding: 8px; }
+  body.embed .buttons button { padding-left: 2px; padding-right: 2px; }
+  body.embed .field { grid-template-columns: 1fr 72px 40px; font-size: 0.9rem; }
+  body.embed input[type="color"] { width: 40px; height: 36px; padding: 2px; }
+  body.embed .palettes button { padding: 6px 8px; font-size: 0.8rem; }
+  body.embed .history table { font-size: 0.85rem; }
 </style>
 <script src="https://cdn.jsdelivr.net/npm/peerjs@1.5.4/dist/peerjs.min.js"></script>
 <script src="timer-core.js?v=5"></script>
@@ -147,6 +161,9 @@
 
 <script>
   const MINUTES_KEY = 'trafficLightTimerMinutes';
+  // Opened by the big screen's "Show full panel" button (inside its page, not on a phone).
+  const embedded = new URLSearchParams(location.search).has('embed') && window.parent !== window;
+  document.body.classList.toggle('embed', embedded);
   const KEYS = ['green', 'amber', 'red'];
   const timeEl = document.getElementById('time');
   const statusEl = document.getElementById('status');
@@ -229,8 +246,9 @@
     const active = running || paused;  // a timer is on: its minutes are locked
     // Minimised (time and buttons fill the screen) while the timer runs; pausing or stopping
     // brings the full panel back.
-    if (running && !document.body.classList.contains('compact')) window.scrollTo(0, 0);
-    document.body.classList.toggle('compact', running);
+    const compact = running && !embedded;
+    if (compact && !document.body.classList.contains('compact')) window.scrollTo(0, 0);
+    document.body.classList.toggle('compact', compact);
     startBtn.disabled = !connected || active || !!minutesProblem;
     pauseBtn.disabled = !active;
     pauseBtn.textContent = paused ? 'Resume' : 'Pause';
@@ -261,7 +279,17 @@
 
   const timerId = new URLSearchParams(location.search).get('id');
 
-  if (!timerId) {
+  if (embedded) {
+    // Inside the big screen's panel: the big screen runs the timer; talk to it directly.
+    send = msg => parent.postMessage({ tlt: 'command', msg }, '*');
+    addEventListener('message', e => {
+      if (e.source === parent && e.data && e.data.tlt === 'state') setState(e.data.state);
+    });
+    // Tell the big screen how tall the panel is, so its box fits it.
+    new ResizeObserver(() => parent.postMessage({ tlt: 'height', h: document.body.scrollHeight }, '*'))
+      .observe(document.body);
+    parent.postMessage({ tlt: 'ready' }, '*');
+  } else if (!timerId) {
     // Opened on its own (not from a QR code): this phone is the timer screen and the remote.
     const timer = createTimer();
     send = msg => { timer.command(msg); setState(timer.state()); };
@@ -310,7 +338,7 @@
       : state.paused ? 'Paused'
       : state.stopped ? 'Stopped – time saved in the history'
       : 'Ready – set the minutes and press Start';
-    document.body.style.background = phaseColour(state.running ? phaseAt(elapsed, state.triggers) : null, state.palette);
+    if (!embedded) document.body.style.background = phaseColour(state.running ? phaseAt(elapsed, state.triggers) : null, state.palette);
   }
 
   validateMinutes();

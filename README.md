@@ -14,6 +14,8 @@ A count-up timer that turns the whole screen green, amber and red at the times y
 
 Several phones can connect at once, on any network.
 
+No phone? Click **Show full panel** next to the QR code to open the same control panel on the big screen. It's see-through, so the colour still shows behind it, and **Hide panel** puts it away.
+
 On a phone, opening the main link goes straight to the control panel and the phone runs the timer on its own screen. Add `?screen` to the link to show the colour screen on any device.
 
 Pick the screen colours on the phone: choose a palette (Bright, Neon, Classic or Deep), or tap the colour square next to each colour to choose your own.
