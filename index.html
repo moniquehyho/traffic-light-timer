@@ -4,6 +4,14 @@
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
 <title>Traffic Light Timer</title>
+<script>
+  // Opened on a phone? Go straight to the control panel (the phone runs the timer itself).
+  // Add ?screen to the link to force this colour screen on any device.
+  if (!new URLSearchParams(location.search).has('screen') &&
+      matchMedia('(pointer: coarse)').matches && Math.min(screen.width, screen.height) < 768) {
+    location.replace('remote.html');
+  }
+</script>
 <style>
   * { box-sizing: border-box; }
   html, body { height: 100%; }
@@ -15,9 +23,6 @@
     transition: background 0.3s;
     overflow: hidden;
   }
-  body.phase-green { background: #0f3d1d; }
-  body.phase-amber { background: #4a3300; }
-  body.phase-red   { background: #4a0f0f; }
 
   .pair {
     position: fixed;
@@ -27,8 +32,11 @@
     flex-direction: column;
     align-items: center;
     gap: 6px;
+    padding: 8px;
+    border-radius: 10px;
+    background: rgba(0, 0, 0, 0.35);
     font-size: 0.75rem;
-    color: #aaa;
+    color: #ddd;
     text-align: center;
   }
   #qr { width: 110px; height: 110px; background: #fff; padding: 6px; border-radius: 6px; }
@@ -36,6 +44,7 @@
 </style>
 <script src="https://cdn.jsdelivr.net/npm/peerjs@1.5.4/dist/peerjs.min.js"></script>
 <script src="https://cdn.jsdelivr.net/npm/qrcode-generator@1.4.4/qrcode.min.js"></script>
+<script src="timer-core.js"></script>
 </head>
 <body title="Double-click for full screen">
   <div class="pair">
@@ -46,85 +55,15 @@
 <script>
   // This screen only shows the colours. Phones paired by the QR code control the timer:
   // they send commands here, and this page sends the timer state back to every phone.
-  const FLASH_MS = 6000;          // how long green and amber show
-  const HISTORY_KEY = 'trafficLightTimerHistory';
   const PEER_ID_KEY = 'trafficLightTimerPeerId';
   const PHONE_PAGE = location.hostname.endsWith('github.io')
     ? new URL('remote.html', location.href).href
     : 'https://moniquehyho.github.io/traffic-light-timer/remote.html';
 
-  let triggers = null;     // { green, amber, red } in ms from start
-  let accumulated = 0;     // ms counted before the current run
-  let startedAt = null;    // timestamp of current run, null when paused
-  let currentEntry = null; // index of this timer's history entry (updated on resume + stop)
-  let history = [];
-  try { history = JSON.parse(localStorage.getItem(HISTORY_KEY) || '[]'); } catch {}
-
-  function pad(n) { return String(n).padStart(2, '0'); }
-  function fmtClock(d) { return `${pad(d.getHours())}:${pad(d.getMinutes())}:${pad(d.getSeconds())}`; }
-
-  function elapsed() {
-    return accumulated + (startedAt ? Date.now() - startedAt : 0);
-  }
-
-  function setPhase(phase) {
-    document.body.className = phase ? 'phase-' + phase : '';
-  }
-
-  function phaseAt(ms) {
-    if (ms >= triggers.red) return 'red';
-    if (ms >= triggers.amber && ms < triggers.amber + FLASH_MS) return 'amber';
-    if (ms >= triggers.green && ms < triggers.green + FLASH_MS) return 'green';
-    return null;
-  }
-
-  function saveHistory() {
-    try { localStorage.setItem(HISTORY_KEY, JSON.stringify(history)); } catch {}
-  }
-
-  // --- Timer commands (sent by phones) ---
-
-  function start(minutes) {
-    if (startedAt) return;
-    if (!triggers) {
-      const { green, amber, red } = minutes || {};
-      if (![green, amber, red].every(v => typeof v === 'number' && v >= 0)) return;
-      triggers = { green: green * 60000, amber: amber * 60000, red: red * 60000 };
-      accumulated = 0;
-      currentEntry = null;
-    }
-    startedAt = Date.now();
-  }
-
-  function stop() {
-    if (!startedAt) return;
-    accumulated = elapsed();
-    startedAt = null;
-    setPhase(null);
-    const entry = { ms: accumulated, stoppedAt: fmtClock(new Date()) };
-    if (currentEntry === null) {
-      history.push(entry);
-      currentEntry = history.length - 1;
-    } else {
-      history[currentEntry] = entry;
-    }
-    saveHistory();
-  }
-
-  function reset() {
-    triggers = null;
-    accumulated = 0;
-    startedAt = null;
-    currentEntry = null;
-    setPhase(null);
-  }
+  const timer = createTimer();
 
   function handleCommand(msg) {
-    if (!msg || typeof msg !== 'object') return;
-    if (msg.cmd === 'start') start(msg.minutes);
-    else if (msg.cmd === 'stop') stop();
-    else if (msg.cmd === 'reset') reset();
-    else if (msg.cmd === 'clearHistory') { history = []; saveHistory(); }
+    timer.command(msg);
     syncPhones();
   }
 
@@ -135,11 +74,8 @@
   const phones = new Set();
   let peer = null;
 
-  function stateMessage() {
-    return { running: !!startedAt, elapsedMs: elapsed(), triggers, history };
-  }
   function syncPhones() {
-    const msg = stateMessage();
+    const msg = timer.state();
     phones.forEach(conn => { if (conn.open) conn.send(msg); });
   }
 
@@ -170,7 +106,7 @@
     peer.on('connection', conn => {
       conn.on('open', () => {
         phones.add(conn);
-        conn.send(stateMessage());
+        conn.send(timer.state());
         showPhoneCount();
       });
       conn.on('data', handleCommand);
@@ -196,9 +132,7 @@
   startPairing(savedId || newPeerId());
   setInterval(syncPhones, 5000);  // regular refresh keeps phones in step
 
-  setInterval(() => {
-    if (startedAt) setPhase(phaseAt(elapsed()));
-  }, 100);
+  setInterval(() => { document.body.style.background = timer.colour(); }, 100);
 
   document.body.addEventListener('dblclick', () => {
     if (document.fullscreenElement) document.exitFullscreen();

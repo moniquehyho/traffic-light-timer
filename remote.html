@@ -16,81 +16,99 @@
     flex-direction: column;
     transition: background 0.3s;
   }
-  body.phase-green { background: #0f3d1d; }
-  body.phase-amber { background: #4a3300; }
-  body.phase-red   { background: #4a0f0f; }
 
-  .display {
-    flex: 1;
-    display: flex;
-    flex-direction: column;
-    align-items: center;
-    justify-content: center;
-    gap: 8px;
-    padding: 24px 16px;
-    min-height: 34vh;
-  }
-  #time { font-size: min(24vw, 9rem); font-weight: 600; font-variant-numeric: tabular-nums; line-height: 1; }
-  #status { font-size: 1.1rem; color: #ccc; min-height: 1.5em; text-align: center; }
+  .colour-area { flex: 1; min-height: 30vh; }  /* left clear so the colour shows cleanly */
 
   .panel {
     display: flex;
     flex-direction: column;
-    gap: 16px;
-    padding: 16px;
-    background: rgba(0, 0, 0, 0.3);
+    gap: 14px;
+    padding: 14px 16px 20px;
+    background: rgba(20, 20, 26, 0.88);
+    border-radius: 18px 18px 0 0;
   }
-  .fields { display: grid; grid-template-columns: repeat(3, 1fr); gap: 10px; }
-  .field { display: flex; flex-direction: column; gap: 4px; font-size: 0.9rem; }
+  .clock { text-align: center; }
+  #time { font-size: 3rem; font-weight: 600; font-variant-numeric: tabular-nums; line-height: 1.1; }
+  #status { font-size: 0.9rem; color: #bbb; min-height: 1.3em; }
+
   input, button {
     font: inherit;
-    font-size: 1.1rem;
+    font-size: 1.05rem;
     padding: 12px;
     border-radius: 10px;
     border: 1px solid #555;
     background: #2c2c34;
     color: inherit;
-    width: 100%;
   }
   input:disabled { opacity: 0.6; }
-  .buttons { display: grid; grid-template-columns: repeat(3, 1fr); gap: 10px; }
   button { cursor: pointer; font-weight: 600; }
   button:disabled { opacity: 0.35; cursor: default; }
   button.primary { background: #2563eb; border-color: #2563eb; }
   button.stop { background: #b91c1c; border-color: #b91c1c; }
+  .buttons { display: grid; grid-template-columns: repeat(3, 1fr); gap: 10px; }
 
-  .history-head { display: flex; justify-content: space-between; align-items: center; margin-bottom: 4px; }
-  .history h2 { margin: 0; font-size: 1rem; }
-  .history button { width: auto; font-size: 0.9rem; padding: 6px 12px; font-weight: 500; }
+  .fields { display: flex; flex-direction: column; gap: 8px; }
+  .field { display: grid; grid-template-columns: 1fr 96px 48px; gap: 8px; align-items: center; font-size: 0.95rem; }
+  .field input[type="number"] { width: 100%; padding: 10px; }
+  input[type="color"] { width: 48px; height: 44px; padding: 3px; cursor: pointer; }
+
+  .palettes { display: grid; grid-template-columns: 1fr 1fr; gap: 8px; }
+  .palettes button {
+    display: flex;
+    align-items: center;
+    gap: 6px;
+    padding: 8px 10px;
+    font-size: 0.85rem;
+    font-weight: 500;
+  }
+  .palettes button.active { border-color: #fff; box-shadow: 0 0 0 1px #fff; }
+  .dot { width: 14px; height: 14px; border-radius: 50%; }
+
+  .section-head { display: flex; justify-content: space-between; align-items: center; margin-bottom: 4px; }
+  .section-head h2 { margin: 0; font-size: 0.95rem; font-weight: 600; }
+  .section-head button { font-size: 0.85rem; padding: 6px 12px; font-weight: 500; }
   .history table { width: 100%; border-collapse: collapse; font-variant-numeric: tabular-nums; font-size: 0.95rem; }
   .history th, .history td { text-align: left; padding: 6px 4px; border-bottom: 1px solid rgba(255, 255, 255, 0.12); }
   .history th { color: #aaa; font-weight: 500; }
   .history .empty { color: #888; }
 </style>
 <script src="https://cdn.jsdelivr.net/npm/peerjs@1.5.4/dist/peerjs.min.js"></script>
+<script src="timer-core.js"></script>
 </head>
 <body>
-  <div class="display">
-    <div id="time">00:00</div>
-    <div id="status">Connecting…</div>
-  </div>
+  <div class="colour-area"></div>
 
   <div class="panel">
-    <div class="fields">
-      <label class="field"><span style="color:#22dd55">Green at (min)</span>
-        <input type="number" id="greenMins" min="0" step="any" inputmode="decimal" value="5"></label>
-      <label class="field"><span style="color:#ffb000">Amber at (min)</span>
-        <input type="number" id="amberMins" min="0" step="any" inputmode="decimal" value="6"></label>
-      <label class="field"><span style="color:#ff2a2a">Red at (min)</span>
-        <input type="number" id="redMins" min="0" step="any" inputmode="decimal" value="7"></label>
+    <div class="clock">
+      <div id="time">00:00</div>
+      <div id="status">Connecting…</div>
     </div>
+
     <div class="buttons">
       <button class="primary" id="startBtn" disabled>Start</button>
       <button class="stop" id="stopBtn" disabled>Stop</button>
       <button id="resetBtn" disabled>Reset</button>
     </div>
+
+    <div class="fields">
+      <div class="field"><label for="greenMins">Green at (min)</label>
+        <input type="number" id="greenMins" min="0" step="any" inputmode="decimal" value="5">
+        <input type="color" id="greenColour" aria-label="Green colour"></div>
+      <div class="field"><label for="amberMins">Amber at (min)</label>
+        <input type="number" id="amberMins" min="0" step="any" inputmode="decimal" value="6">
+        <input type="color" id="amberColour" aria-label="Amber colour"></div>
+      <div class="field"><label for="redMins">Red at (min)</label>
+        <input type="number" id="redMins" min="0" step="any" inputmode="decimal" value="7">
+        <input type="color" id="redColour" aria-label="Red colour"></div>
+    </div>
+
+    <div>
+      <div class="section-head"><h2>Screen colours</h2></div>
+      <div class="palettes" id="palettes"></div>
+    </div>
+
     <div class="history">
-      <div class="history-head">
+      <div class="section-head">
         <h2>Timer history</h2>
         <button id="clearHistoryBtn" disabled>Clear</button>
       </div>
@@ -102,61 +120,46 @@
   </div>
 
 <script>
-  const FLASH_MS = 6000;
   const MINUTES_KEY = 'trafficLightTimerMinutes';
+  const KEYS = ['green', 'amber', 'red'];
   const timeEl = document.getElementById('time');
   const statusEl = document.getElementById('status');
   const startBtn = document.getElementById('startBtn');
   const stopBtn = document.getElementById('stopBtn');
   const resetBtn = document.getElementById('resetBtn');
   const clearBtn = document.getElementById('clearHistoryBtn');
-  const inputs = {
-    green: document.getElementById('greenMins'),
-    amber: document.getElementById('amberMins'),
-    red: document.getElementById('redMins'),
-  };
+  const minuteInputs = Object.fromEntries(KEYS.map(k => [k, document.getElementById(k + 'Mins')]));
+  const colourInputs = Object.fromEntries(KEYS.map(k => [k, document.getElementById(k + 'Colour')]));
+  const palettesEl = document.getElementById('palettes');
   const historyBody = document.getElementById('historyBody');
 
-  let state = null;      // last state sent by the timer screen
+  let state = null;      // latest timer state (from the big screen, or this phone's own timer)
   let receivedAt = 0;    // performance.now() when it arrived
+  let send = () => {};   // sends a command to whichever timer this phone controls
+
+  function setState(s) {
+    state = s;
+    receivedAt = performance.now();
+    renderControls();
+  }
 
   // Remember this phone's last minute settings.
-  try {
-    const saved = JSON.parse(localStorage.getItem(MINUTES_KEY) || 'null');
-    if (saved) Object.entries(inputs).forEach(([k, el]) => { if (saved[k] != null) el.value = saved[k]; });
-  } catch {}
+  const savedMinutes = loadJson(MINUTES_KEY, null);
+  if (savedMinutes) KEYS.forEach(k => { if (savedMinutes[k] != null) minuteInputs[k].value = savedMinutes[k]; });
 
-  function pad(n) { return String(n).padStart(2, '0'); }
-  function fmtDuration(ms) {
-    const secs = Math.floor(ms / 1000);
-    const hh = Math.floor(secs / 3600), mm = Math.floor(secs % 3600 / 60), ss = secs % 60;
-    return hh ? `${hh}:${pad(mm)}:${pad(ss)}` : `${pad(mm)}:${pad(ss)}`;
-  }
   function escapeHtml(s) { return String(s).replace(/[&<>"']/g, c => `&#${c.charCodeAt(0)};`); }
 
-  function phaseAt(ms, t) {
-    if (!t) return null;
-    if (ms >= t.red) return 'red';
-    if (ms >= t.amber && ms < t.amber + FLASH_MS) return 'amber';
-    if (ms >= t.green && ms < t.green + FLASH_MS) return 'green';
-    return null;
-  }
-
-  // --- Controls: send commands to the timer screen, which replies with the new state ---
-
-  function send(msg) {
-    if (conn && conn.open) conn.send(msg);
-  }
+  // --- Controls ---
 
   startBtn.addEventListener('click', () => {
     if (state && state.triggers) return send({ cmd: 'start' });  // resume
     const minutes = {};
-    for (const [k, el] of Object.entries(inputs)) {
-      const v = parseFloat(el.value);
+    for (const k of KEYS) {
+      const v = parseFloat(minuteInputs[k].value);
       if (!(v >= 0)) { statusEl.textContent = 'Please enter minutes (0 or more) for each colour.'; return; }
       minutes[k] = v;
     }
-    try { localStorage.setItem(MINUTES_KEY, JSON.stringify(minutes)); } catch {}
+    saveJson(MINUTES_KEY, minutes);
     send({ cmd: 'start', minutes });
   });
   stopBtn.addEventListener('click', () => send({ cmd: 'stop' }));
@@ -164,6 +167,21 @@
   clearBtn.addEventListener('click', () => {
     if (confirm('Clear the timer history?')) send({ cmd: 'clearHistory' });
   });
+
+  function sendPalette(palette) {
+    send({ cmd: 'palette', palette: { green: palette.green, amber: palette.amber, red: palette.red } });
+  }
+  palettesEl.innerHTML = Object.entries(PALETTES).map(([id, p]) =>
+    `<button type="button" data-palette="${id}">` +
+    KEYS.map(k => `<span class="dot" style="background:${p[k]}"></span>`).join('') +
+    `${p.name}</button>`).join('');
+  palettesEl.addEventListener('click', e => {
+    const btn = e.target.closest('button[data-palette]');
+    if (btn && !btn.disabled) sendPalette(PALETTES[btn.dataset.palette]);
+  });
+  KEYS.forEach(k => colourInputs[k].addEventListener('input', () => {
+    sendPalette(Object.fromEntries(KEYS.map(key => [key, colourInputs[key].value])));
+  }));
 
   function renderControls() {
     const connected = !!state;
@@ -173,9 +191,16 @@
     stopBtn.disabled = !connected || !state.running;
     resetBtn.disabled = !connected;
     clearBtn.disabled = !connected || !state.history || !state.history.length;
-    Object.entries(inputs).forEach(([k, el]) => {
-      el.disabled = !connected || active;
-      if (active) el.value = +(state.triggers[k] / 60000).toFixed(2);  // show the running timer's settings
+    KEYS.forEach(k => {
+      minuteInputs[k].disabled = !connected || active;
+      if (active) minuteInputs[k].value = +(state.triggers[k] / 60000).toFixed(2);  // the running timer's settings
+      colourInputs[k].disabled = !connected;
+      if (connected && document.activeElement !== colourInputs[k]) colourInputs[k].value = state.palette[k];
+    });
+    palettesEl.querySelectorAll('button').forEach(btn => {
+      const p = PALETTES[btn.dataset.palette];
+      btn.disabled = !connected;
+      btn.classList.toggle('active', connected && KEYS.every(k => p[k].toLowerCase() === state.palette[k].toLowerCase()));
     });
 
     const history = (state && state.history) || [];
@@ -185,44 +210,45 @@
       : '<tr><td colspan="3" class="empty">No timers yet.</td></tr>';
   }
 
-  // --- Connect straight to the timer screen whose pairing code is in the QR link (?id=...) ---
+  // --- Which timer does this phone control? ---
 
   const timerId = new URLSearchParams(location.search).get('id');
-  let peer = null;
-  let conn = null;
-  let retryTimer = null;
-
-  function retry() {
-    if (retryTimer) return;  // close and error often fire together; retry once
-    state = null;
-    renderControls();
-    statusEl.textContent = 'Lost connection to the timer. Reconnecting…';
-    retryTimer = setTimeout(() => { retryTimer = null; connect(); }, 3000);
-  }
-
-  function connect() {
-    if (peer.disconnected) peer.reconnect();
-    const old = conn;
-    const c = conn = peer.connect(timerId, { reliable: true });
-    if (old) old.close();
-    c.on('data', data => {
-      state = data;
-      receivedAt = performance.now();
-      renderControls();
-    });
-    c.on('close', () => { if (c === conn) retry(); });  // ignore the old connection closing
-    c.on('error', () => { if (c === conn) retry(); });
-  }
 
   if (!timerId) {
-    statusEl.textContent = 'Scan the QR code on the timer screen to connect.';
+    // Opened on its own (not from a QR code): this phone is the timer screen and the remote.
+    const timer = createTimer();
+    send = msg => { timer.command(msg); setState(timer.state()); };
+    setState(timer.state());
   } else if (typeof Peer === 'undefined') {
     statusEl.textContent = 'Couldn’t load the pairing tool. Check your internet and reload.';
   } else {
-    peer = new Peer();
+    // Opened from the QR code: connect straight to that big screen and control it.
+    let peer = new Peer();
+    let conn = null;
+    let retryTimer = null;
+
+    const retry = () => {
+      if (retryTimer) return;  // close and error often fire together; retry once
+      state = null;
+      renderControls();
+      statusEl.textContent = 'Lost connection to the timer. Reconnecting…';
+      retryTimer = setTimeout(() => { retryTimer = null; connect(); }, 3000);
+    };
+
+    const connect = () => {
+      if (peer.disconnected) peer.reconnect();
+      const old = conn;
+      const c = conn = peer.connect(timerId, { reliable: true });
+      if (old) old.close();
+      c.on('data', setState);
+      c.on('close', () => { if (c === conn) retry(); });  // ignore the old connection closing
+      c.on('error', () => { if (c === conn) retry(); });
+    };
+
+    send = msg => { if (conn && conn.open) conn.send(msg); };
     peer.on('open', connect);
     peer.on('error', err => {
-      // 'peer-unavailable' means the timer screen isn't open (yet), so keep trying.
+      // 'peer-unavailable' means the big screen isn't open (yet), so keep trying.
       if (err.type === 'peer-unavailable') retry();
       else statusEl.textContent = 'Can’t reach the pairing service. Retrying…';
     });
@@ -234,8 +260,7 @@
     const elapsed = state.elapsedMs + (state.running ? performance.now() - receivedAt : 0);
     timeEl.textContent = fmtDuration(elapsed);
     statusEl.textContent = state.running ? '' : (state.triggers ? 'Paused' : 'Ready – set the minutes and press Start');
-    const phase = state.running ? phaseAt(elapsed, state.triggers) : null;
-    document.body.className = phase ? 'phase-' + phase : '';
+    document.body.style.background = phaseColour(state.running ? phaseAt(elapsed, state.triggers) : null, state.palette);
   }
 
   renderControls();

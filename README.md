@@ -13,4 +13,8 @@ A count-up timer that turns the whole screen green, amber and red at the times y
 
 Several phones can connect at once, on any network.
 
+On a phone, opening the main link goes straight to the control panel and the phone runs the timer on its own screen. Add `?screen` to the link to show the colour screen on any device.
+
+Pick the screen colours on the phone: choose a palette (Bright, Neon, Classic or Deep), or tap the colour square next to each colour to choose your own.
+
 Phones connect directly to the timer page over WebRTC using [PeerJS](https://peerjs.com/). PeerJS's free public server only introduces the two devices; the timer updates go device to device. Both devices need internet access, and some strict office networks block this kind of connection.
