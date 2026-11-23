@@ -18,6 +18,8 @@
     transition: background 0.3s;
   }
 
+  /* Top of the page: clear colour, then the time and buttons. Settings and history follow. */
+  .hero { flex: 1; display: flex; flex-direction: column; }
   .colour-area { flex: 1; min-height: 30vh; }  /* left clear so the colour shows cleanly */
 
   /* See-through panel: the screen colour shows behind everything, and a soft shadow keeps
@@ -26,21 +28,24 @@
     display: flex;
     flex-direction: column;
     gap: 14px;
-    padding: 14px max(16px, env(safe-area-inset-right)) max(20px, env(safe-area-inset-bottom)) max(16px, env(safe-area-inset-left));
+    padding: 14px max(16px, env(safe-area-inset-right)) 0 max(16px, env(safe-area-inset-left));
     text-shadow: 0 1px 3px rgba(0, 0, 0, 0.55);
   }
+  .setup-panel { padding-top: 14px; padding-bottom: max(20px, env(safe-area-inset-bottom)); }
+  .scroll-hint { display: none; text-align: center; font-size: 0.8rem; opacity: 0.8; }
   .clock { text-align: center; }
   #time { font-size: 3rem; font-weight: 600; font-variant-numeric: tabular-nums; line-height: 1.1; }
   #status { font-size: 0.9rem; min-height: 1.3em; }
 
-  /* While the timer runs: just the time and buttons, fitted to the visible screen so nothing
-     needs scrolling, and sized to the phone (smaller on short or landscape screens). */
-  body.compact { height: 100vh; height: 100dvh; overflow: hidden; }
+  /* While the timer runs: the first screen is just the colour, the time and the buttons,
+     fitted to the visible height and sized to the phone (smaller on short or landscape
+     screens). Settings and history are still there below; scroll down to reach them. */
+  body.compact .hero { flex: none; min-height: 100vh; min-height: 100dvh; }
   body.compact .colour-area { min-height: 0; }
-  body.compact .setup { display: none; }
-  body.compact .panel { padding-bottom: max(6vh, 20px, env(safe-area-inset-bottom)); }
+  body.compact .hero .panel { padding-bottom: max(3vh, 12px, env(safe-area-inset-bottom)); }
+  body.compact .scroll-hint { display: block; }
   body.compact #time { font-size: clamp(2.5rem, min(18vw, 11dvh), 6rem); }
-  body.compact .buttons button { padding: clamp(10px, 2.2dvh, 18px) 12px; font-size: clamp(1rem, 2.4dvh, 1.3rem); }
+  body.compact .buttons button { padding: clamp(10px, 2.2dvh, 18px) 4px; font-size: clamp(1rem, 2.4dvh, 1.3rem); }
 
   input, button {
     font: inherit;
@@ -57,7 +62,8 @@
   button:disabled { opacity: 0.35; cursor: default; }
   button.primary { background: rgba(255, 255, 255, 0.3); border-color: #fff; }
   button.stop { background: rgba(0, 0, 0, 0.25); border-color: #fff; }
-  .buttons { display: grid; grid-template-columns: repeat(3, 1fr); gap: 10px; }
+  .buttons { display: grid; grid-template-columns: repeat(4, 1fr); gap: 8px; }
+  .buttons button { padding-left: 4px; padding-right: 4px; }
 
   .fields { display: flex; flex-direction: column; gap: 8px; }
   .field { display: grid; grid-template-columns: 1fr 96px 48px; gap: 8px; align-items: center; font-size: 0.95rem; }
@@ -88,23 +94,27 @@
   .history .empty { opacity: 0.75; }
 </style>
 <script src="https://cdn.jsdelivr.net/npm/peerjs@1.5.4/dist/peerjs.min.js"></script>
-<script src="timer-core.js?v=4"></script>
+<script src="timer-core.js?v=5"></script>
 </head>
 <body>
-  <div class="colour-area"></div>
-
-  <div class="panel">
-    <div class="clock">
-      <div id="time">00:00</div>
-      <div id="status">Connecting…</div>
+  <div class="hero">
+    <div class="colour-area"></div>
+    <div class="panel">
+      <div class="clock">
+        <div id="time">00:00</div>
+        <div id="status">Connecting…</div>
+      </div>
+      <div class="buttons">
+        <button class="primary" id="startBtn" disabled>Start</button>
+        <button id="pauseBtn" disabled>Pause</button>
+        <button class="stop" id="stopBtn" disabled>Stop</button>
+        <button id="resetBtn" disabled>Reset</button>
+      </div>
+      <div class="scroll-hint">Scroll down for settings and history</div>
     </div>
+  </div>
 
-    <div class="buttons">
-      <button class="primary" id="startBtn" disabled>Start</button>
-      <button class="stop" id="stopBtn" disabled>Stop</button>
-      <button id="resetBtn" disabled>Reset</button>
-    </div>
-
+  <div class="panel setup-panel">
     <div class="fields setup">
       <div class="field"><label for="greenMins">Green at (min)</label>
         <input type="number" id="greenMins" min="0" step="any" inputmode="decimal" value="5">
@@ -141,6 +151,7 @@
   const timeEl = document.getElementById('time');
   const statusEl = document.getElementById('status');
   const startBtn = document.getElementById('startBtn');
+  const pauseBtn = document.getElementById('pauseBtn');
   const stopBtn = document.getElementById('stopBtn');
   const resetBtn = document.getElementById('resetBtn');
   const clearBtn = document.getElementById('clearHistoryBtn');
@@ -183,13 +194,13 @@
   KEYS.forEach(k => minuteInputs[k].addEventListener('input', () => { validateMinutes(); renderControls(); }));
 
   startBtn.addEventListener('click', () => {
-    if (state && state.triggers) return send({ cmd: 'start' });  // resume
     validateMinutes();
     if (minutesProblem) return renderControls();
     const minutes = readMinutes();
     saveJson(MINUTES_KEY, minutes);
     send({ cmd: 'start', minutes });
   });
+  pauseBtn.addEventListener('click', () => send({ cmd: state && state.paused ? 'resume' : 'pause' }));
   stopBtn.addEventListener('click', () => send({ cmd: 'stop' }));
   resetBtn.addEventListener('click', () => send({ cmd: 'reset' }));
   clearBtn.addEventListener('click', () => {
@@ -213,14 +224,18 @@
 
   function renderControls() {
     const connected = !!state;
-    const active = connected && !!state.triggers;  // running or paused
-    // Only the time and buttons while the timer runs; Stop brings the full panel back.
     const running = connected && state.running;
+    const paused = connected && !!state.paused;
+    const active = running || paused;  // a timer is on: its minutes are locked
+    // Minimised (time and buttons fill the screen) while the timer runs; pausing or stopping
+    // brings the full panel back.
     if (running && !document.body.classList.contains('compact')) window.scrollTo(0, 0);
     document.body.classList.toggle('compact', running);
-    startBtn.disabled = !connected || state.running || (!active && !!minutesProblem);
-    startBtn.textContent = active && !state.running ? 'Resume' : 'Start';
-    stopBtn.disabled = !connected || !state.running;
+    startBtn.disabled = !connected || active || !!minutesProblem;
+    pauseBtn.disabled = !active;
+    pauseBtn.textContent = paused ? 'Resume' : 'Pause';
+    pauseBtn.classList.toggle('primary', paused);
+    stopBtn.disabled = !active;
     resetBtn.disabled = !connected;
     clearBtn.disabled = !connected || !state.history || !state.history.length;
     KEYS.forEach(k => {
@@ -291,7 +306,10 @@
     if (!state) return;
     const elapsed = state.elapsedMs + (state.running ? performance.now() - receivedAt : 0);
     timeEl.textContent = fmtDuration(elapsed);
-    statusEl.textContent = state.running ? '' : (state.triggers ? 'Paused' : 'Ready – set the minutes and press Start');
+    statusEl.textContent = state.running ? ''
+      : state.paused ? 'Paused'
+      : state.stopped ? 'Stopped – time saved in the history'
+      : 'Ready – set the minutes and press Start';
     document.body.style.background = phaseColour(state.running ? phaseAt(elapsed, state.triggers) : null, state.palette);
   }
 

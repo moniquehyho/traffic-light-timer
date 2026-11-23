@@ -58,10 +58,11 @@ function createTimer() {
   const HISTORY_KEY = 'trafficLightTimerHistory';
   const PALETTE_KEY = 'trafficLightTimerPalette';
 
+  // A timer is idle (no triggers), running, paused, or stopped (finished, time saved).
   let triggers = null;     // { green, amber, red } in ms from start
   let accumulated = 0;     // ms counted before the current run
-  let startedAt = null;    // timestamp of current run, null when paused
-  let currentEntry = null; // index of this timer's history entry (updated on resume + stop)
+  let startedAt = null;    // timestamp of current run, null when not running
+  let stopped = false;     // finished with Stop; its time is in the history
   let history = loadJson(HISTORY_KEY, []);
   let palette = loadJson(PALETTE_KEY, null);
   if (!validPalette(palette)) palette = { ...PALETTES.bright };
@@ -70,43 +71,57 @@ function createTimer() {
     return accumulated + (startedAt ? Date.now() - startedAt : 0);
   }
 
-  function start(minutes) {
-    if (startedAt) return;
-    if (!triggers) {
-      if (!minutes || checkMinutes(minutes)) return;
-      const { green, amber, red } = minutes;
-      triggers = { green: green * 60000, amber: amber * 60000, red: red * 60000 };
-      accumulated = 0;
-      currentEntry = null;
-    }
-    startedAt = Date.now();
-  }
-
-  function stop() {
-    if (!startedAt) return;
-    accumulated = elapsed();
-    startedAt = null;
-    const entry = { ms: accumulated, stoppedAt: fmtClock(new Date()) };
-    if (currentEntry === null) {
-      history.push(entry);
-      currentEntry = history.length - 1;
-    } else {
-      history[currentEntry] = entry;
-    }
+  function record() {
+    history.push({ ms: elapsed(), stoppedAt: fmtClock(new Date()) });
     saveJson(HISTORY_KEY, history);
   }
 
+  // Start a new timer (from idle, or after the last one was stopped).
+  function start(minutes) {
+    if (triggers && !stopped) return;  // already running or paused
+    if (!minutes || checkMinutes(minutes)) return;
+    const { green, amber, red } = minutes;
+    triggers = { green: green * 60000, amber: amber * 60000, red: red * 60000 };
+    accumulated = 0;
+    stopped = false;
+    startedAt = Date.now();
+  }
+
+  function pause() {
+    if (!startedAt) return;
+    accumulated = elapsed();
+    startedAt = null;
+  }
+
+  function resume() {
+    if (!triggers || stopped || startedAt) return;
+    startedAt = Date.now();
+  }
+
+  // Finish the timer and save its time.
+  function stop() {
+    if (!triggers || stopped) return;
+    accumulated = elapsed();
+    startedAt = null;
+    stopped = true;
+    record();
+  }
+
+  // Clear the timer. A timer that ran but wasn't stopped still gets its time saved.
   function reset() {
+    if (triggers && !stopped && elapsed() > 0) record();
     triggers = null;
     accumulated = 0;
     startedAt = null;
-    currentEntry = null;
+    stopped = false;
   }
 
   return {
     command(msg) {
       if (!msg || typeof msg !== 'object') return;
       if (msg.cmd === 'start') start(msg.minutes);
+      else if (msg.cmd === 'pause') pause();
+      else if (msg.cmd === 'resume') resume();
       else if (msg.cmd === 'stop') stop();
       else if (msg.cmd === 'reset') reset();
       else if (msg.cmd === 'clearHistory') { history = []; saveJson(HISTORY_KEY, history); }
@@ -116,9 +131,18 @@ function createTimer() {
       }
     },
     state() {
-      return { running: !!startedAt, elapsedMs: elapsed(), triggers, history, palette };
+      const running = !!startedAt;
+      return {
+        running,
+        paused: !!triggers && !stopped && !running,
+        stopped,
+        elapsedMs: elapsed(),
+        triggers,
+        history,
+        palette,
+      };
     },
-    // Current screen colour: idle grey until green comes in, or while paused.
+    // Current screen colour: idle grey until green comes in, and while paused or stopped.
     colour() {
       return phaseColour(startedAt ? phaseAt(elapsed(), triggers) : null, palette);
     },

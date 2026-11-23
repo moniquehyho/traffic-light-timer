@@ -4,7 +4,8 @@ A count-up timer that turns the whole screen green, amber and red at the times y
 
 - The screen turns **green** at its minute mark and stays green until **amber** comes in, then stays amber until **red**.
 - **Red** comes on at its minute mark and stays on until you press Stop or Reset.
-- **Stop** pauses the timer and shows the time. Every stop is saved in the timer history.
+- **Pause** holds the timer and **Resume** carries on. **Stop** ends the timer and saves its time in the timer history.
+- **Reset** clears the timer. If it wasn't stopped first, its time is still saved in the history.
 
 ## Use it
 
