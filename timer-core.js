@@ -32,6 +32,17 @@ function phaseColour(phase, palette) {
   return phase ? palette[phase] : IDLE_COLOUR;
 }
 
+// Checks the minute marks: each a number of 0 or more, with green before amber before red.
+// Returns an error message and the colours to highlight, or null when they're fine.
+function checkMinutes(m) {
+  const keys = ['green', 'amber', 'red'];
+  const missing = keys.filter(k => !(typeof m[k] === 'number' && m[k] >= 0));
+  if (missing.length) return { message: 'Enter minutes (0 or more) for each colour.', bad: missing };
+  if (m.green >= m.amber) return { message: 'Green must come before amber – use a smaller number for green.', bad: ['green', 'amber'] };
+  if (m.amber >= m.red) return { message: 'Amber must come before red – use a smaller number for amber.', bad: ['amber', 'red'] };
+  return null;
+}
+
 function validPalette(p) {
   return !!p && ['green', 'amber', 'red'].every(k => /^#[0-9a-f]{6}$/i.test(p[k]));
 }
@@ -62,8 +73,8 @@ function createTimer() {
   function start(minutes) {
     if (startedAt) return;
     if (!triggers) {
-      const { green, amber, red } = minutes || {};
-      if (![green, amber, red].every(v => typeof v === 'number' && v >= 0)) return;
+      if (!minutes || checkMinutes(minutes)) return;
+      const { green, amber, red } = minutes;
       triggers = { green: green * 60000, amber: amber * 60000, red: red * 60000 };
       accumulated = 0;
       currentEntry = null;

@@ -33,7 +33,7 @@
   #time { font-size: 3rem; font-weight: 600; font-variant-numeric: tabular-nums; line-height: 1.1; }
   #status { font-size: 0.9rem; min-height: 1.3em; }
 
-  /* While a timer is on: just the time and buttons, fitted to the visible screen so nothing
+  /* While the timer runs: just the time and buttons, fitted to the visible screen so nothing
      needs scrolling, and sized to the phone (smaller on short or landscape screens). */
   body.compact { height: 100vh; height: 100dvh; overflow: hidden; }
   body.compact .colour-area { min-height: 0; }
@@ -63,6 +63,8 @@
   .field { display: grid; grid-template-columns: 1fr 96px 48px; gap: 8px; align-items: center; font-size: 0.95rem; }
   .field input[type="number"] { width: 100%; padding: 10px; }
   input[type="color"] { width: 48px; height: 44px; padding: 3px; cursor: pointer; }
+  .field input.invalid { border-color: #ff6b6b; box-shadow: 0 0 0 1.5px #ff6b6b; }
+  .error { color: #ffb3b3; font-size: 0.9rem; }
 
   .palettes { display: grid; grid-template-columns: 1fr 1fr; gap: 8px; }
   .palettes button {
@@ -86,7 +88,7 @@
   .history .empty { opacity: 0.75; }
 </style>
 <script src="https://cdn.jsdelivr.net/npm/peerjs@1.5.4/dist/peerjs.min.js"></script>
-<script src="timer-core.js?v=3"></script>
+<script src="timer-core.js?v=4"></script>
 </head>
 <body>
   <div class="colour-area"></div>
@@ -113,6 +115,7 @@
       <div class="field"><label for="redMins">Red at (min)</label>
         <input type="number" id="redMins" min="0" step="any" inputmode="decimal" value="7">
         <input type="color" id="redColour" aria-label="Red colour"></div>
+      <div id="minutesError" class="error" role="alert" hidden></div>
     </div>
 
     <div class="setup">
@@ -164,14 +167,26 @@
 
   // --- Controls ---
 
+  // Check the minutes as they're typed: green before amber before red. Highlights the boxes
+  // to fix and keeps Start off until they're right.
+  const minutesErrorEl = document.getElementById('minutesError');
+  let minutesProblem = null;
+  function readMinutes() {
+    return Object.fromEntries(KEYS.map(k => [k, parseFloat(minuteInputs[k].value)]));
+  }
+  function validateMinutes() {
+    minutesProblem = checkMinutes(readMinutes());
+    KEYS.forEach(k => minuteInputs[k].classList.toggle('invalid', !!minutesProblem && minutesProblem.bad.includes(k)));
+    minutesErrorEl.hidden = !minutesProblem;
+    minutesErrorEl.textContent = minutesProblem ? minutesProblem.message : '';
+  }
+  KEYS.forEach(k => minuteInputs[k].addEventListener('input', () => { validateMinutes(); renderControls(); }));
+
   startBtn.addEventListener('click', () => {
     if (state && state.triggers) return send({ cmd: 'start' });  // resume
-    const minutes = {};
-    for (const k of KEYS) {
-      const v = parseFloat(minuteInputs[k].value);
-      if (!(v >= 0)) { statusEl.textContent = 'Please enter minutes (0 or more) for each colour.'; return; }
-      minutes[k] = v;
-    }
+    validateMinutes();
+    if (minutesProblem) return renderControls();
+    const minutes = readMinutes();
     saveJson(MINUTES_KEY, minutes);
     send({ cmd: 'start', minutes });
   });
@@ -199,9 +214,11 @@
   function renderControls() {
     const connected = !!state;
     const active = connected && !!state.triggers;  // running or paused
-    if (active && !document.body.classList.contains('compact')) window.scrollTo(0, 0);
-    document.body.classList.toggle('compact', active);  // only the time and buttons while a timer is on
-    startBtn.disabled = !connected || state.running;
+    // Only the time and buttons while the timer runs; Stop brings the full panel back.
+    const running = connected && state.running;
+    if (running && !document.body.classList.contains('compact')) window.scrollTo(0, 0);
+    document.body.classList.toggle('compact', running);
+    startBtn.disabled = !connected || state.running || (!active && !!minutesProblem);
     startBtn.textContent = active && !state.running ? 'Resume' : 'Start';
     stopBtn.disabled = !connected || !state.running;
     resetBtn.disabled = !connected;
@@ -278,6 +295,7 @@
     document.body.style.background = phaseColour(state.running ? phaseAt(elapsed, state.triggers) : null, state.palette);
   }
 
+  validateMinutes();
   renderControls();
   setInterval(render, 100);
 </script>
