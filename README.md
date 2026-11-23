@@ -8,10 +8,9 @@ A count-up timer that turns the whole screen green, amber and red at the times y
 
 ## Use it
 
-Open https://moniquehyho.github.io/traffic-light-timer/
+1. On the laptop or big screen, open https://moniquehyho.github.io/traffic-light-timer/ (double-click for full screen). It only shows the colours and a QR code in the corner.
+2. Scan the QR code with your phone. The phone is the remote: set the minutes for each colour, then Start, Stop, Resume or Reset. It also shows the ticking timer and the timer history.
 
-## Watch it on a phone
-
-Scan the QR code at the bottom of the timer screen. The phone shows the ticking timer and changes colour with the screen. Several phones can connect at once, on any network.
+Several phones can connect at once, on any network.
 
 Phones connect directly to the timer page over WebRTC using [PeerJS](https://peerjs.com/). PeerJS's free public server only introduces the two devices; the timer updates go device to device. Both devices need internet access, and some strict office networks block this kind of connection.

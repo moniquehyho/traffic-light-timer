@@ -3,8 +3,9 @@
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
-<title>Timer</title>
+<title>Timer Control</title>
 <style>
+  * { box-sizing: border-box; }
   body {
     margin: 0;
     min-height: 100vh;
@@ -13,30 +14,117 @@
     color: #f2f2f2;
     display: flex;
     flex-direction: column;
-    align-items: center;
-    justify-content: center;
-    gap: 16px;
     transition: background 0.3s;
   }
-  #time { font-size: 24vw; font-weight: 600; font-variant-numeric: tabular-nums; line-height: 1; }
-  #status { font-size: 1.3rem; color: #ccc; min-height: 1.5em; }
   body.phase-green { background: #0f3d1d; }
   body.phase-amber { background: #4a3300; }
   body.phase-red   { background: #4a0f0f; }
+
+  .display {
+    flex: 1;
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    justify-content: center;
+    gap: 8px;
+    padding: 24px 16px;
+    min-height: 34vh;
+  }
+  #time { font-size: min(24vw, 9rem); font-weight: 600; font-variant-numeric: tabular-nums; line-height: 1; }
+  #status { font-size: 1.1rem; color: #ccc; min-height: 1.5em; text-align: center; }
+
+  .panel {
+    display: flex;
+    flex-direction: column;
+    gap: 16px;
+    padding: 16px;
+    background: rgba(0, 0, 0, 0.3);
+  }
+  .fields { display: grid; grid-template-columns: repeat(3, 1fr); gap: 10px; }
+  .field { display: flex; flex-direction: column; gap: 4px; font-size: 0.9rem; }
+  input, button {
+    font: inherit;
+    font-size: 1.1rem;
+    padding: 12px;
+    border-radius: 10px;
+    border: 1px solid #555;
+    background: #2c2c34;
+    color: inherit;
+    width: 100%;
+  }
+  input:disabled { opacity: 0.6; }
+  .buttons { display: grid; grid-template-columns: repeat(3, 1fr); gap: 10px; }
+  button { cursor: pointer; font-weight: 600; }
+  button:disabled { opacity: 0.35; cursor: default; }
+  button.primary { background: #2563eb; border-color: #2563eb; }
+  button.stop { background: #b91c1c; border-color: #b91c1c; }
+
+  .history-head { display: flex; justify-content: space-between; align-items: center; margin-bottom: 4px; }
+  .history h2 { margin: 0; font-size: 1rem; }
+  .history button { width: auto; font-size: 0.9rem; padding: 6px 12px; font-weight: 500; }
+  .history table { width: 100%; border-collapse: collapse; font-variant-numeric: tabular-nums; font-size: 0.95rem; }
+  .history th, .history td { text-align: left; padding: 6px 4px; border-bottom: 1px solid rgba(255, 255, 255, 0.12); }
+  .history th { color: #aaa; font-weight: 500; }
+  .history .empty { color: #888; }
 </style>
 <script src="https://cdn.jsdelivr.net/npm/peerjs@1.5.4/dist/peerjs.min.js"></script>
 </head>
 <body>
-  <div id="time">00:00</div>
-  <div id="status">Connecting…</div>
+  <div class="display">
+    <div id="time">00:00</div>
+    <div id="status">Connecting…</div>
+  </div>
+
+  <div class="panel">
+    <div class="fields">
+      <label class="field"><span style="color:#22dd55">Green at (min)</span>
+        <input type="number" id="greenMins" min="0" step="any" inputmode="decimal" value="5"></label>
+      <label class="field"><span style="color:#ffb000">Amber at (min)</span>
+        <input type="number" id="amberMins" min="0" step="any" inputmode="decimal" value="6"></label>
+      <label class="field"><span style="color:#ff2a2a">Red at (min)</span>
+        <input type="number" id="redMins" min="0" step="any" inputmode="decimal" value="7"></label>
+    </div>
+    <div class="buttons">
+      <button class="primary" id="startBtn" disabled>Start</button>
+      <button class="stop" id="stopBtn" disabled>Stop</button>
+      <button id="resetBtn" disabled>Reset</button>
+    </div>
+    <div class="history">
+      <div class="history-head">
+        <h2>Timer history</h2>
+        <button id="clearHistoryBtn" disabled>Clear</button>
+      </div>
+      <table>
+        <thead><tr><th>#</th><th>Timer</th><th>Stopped at</th></tr></thead>
+        <tbody id="historyBody"></tbody>
+      </table>
+    </div>
+  </div>
 
 <script>
   const FLASH_MS = 6000;
+  const MINUTES_KEY = 'trafficLightTimerMinutes';
   const timeEl = document.getElementById('time');
   const statusEl = document.getElementById('status');
+  const startBtn = document.getElementById('startBtn');
+  const stopBtn = document.getElementById('stopBtn');
+  const resetBtn = document.getElementById('resetBtn');
+  const clearBtn = document.getElementById('clearHistoryBtn');
+  const inputs = {
+    green: document.getElementById('greenMins'),
+    amber: document.getElementById('amberMins'),
+    red: document.getElementById('redMins'),
+  };
+  const historyBody = document.getElementById('historyBody');
 
-  let server = null;     // last state sent by the timer page
+  let state = null;      // last state sent by the timer screen
   let receivedAt = 0;    // performance.now() when it arrived
+
+  // Remember this phone's last minute settings.
+  try {
+    const saved = JSON.parse(localStorage.getItem(MINUTES_KEY) || 'null');
+    if (saved) Object.entries(inputs).forEach(([k, el]) => { if (saved[k] != null) el.value = saved[k]; });
+  } catch {}
 
   function pad(n) { return String(n).padStart(2, '0'); }
   function fmtDuration(ms) {
@@ -44,6 +132,7 @@
     const hh = Math.floor(secs / 3600), mm = Math.floor(secs % 3600 / 60), ss = secs % 60;
     return hh ? `${hh}:${pad(mm)}:${pad(ss)}` : `${pad(mm)}:${pad(ss)}`;
   }
+  function escapeHtml(s) { return String(s).replace(/[&<>"']/g, c => `&#${c.charCodeAt(0)};`); }
 
   function phaseAt(ms, t) {
     if (!t) return null;
@@ -53,7 +142,51 @@
     return null;
   }
 
-  // Connect straight to the timer page whose pairing code is in the QR link (?id=...).
+  // --- Controls: send commands to the timer screen, which replies with the new state ---
+
+  function send(msg) {
+    if (conn && conn.open) conn.send(msg);
+  }
+
+  startBtn.addEventListener('click', () => {
+    if (state && state.triggers) return send({ cmd: 'start' });  // resume
+    const minutes = {};
+    for (const [k, el] of Object.entries(inputs)) {
+      const v = parseFloat(el.value);
+      if (!(v >= 0)) { statusEl.textContent = 'Please enter minutes (0 or more) for each colour.'; return; }
+      minutes[k] = v;
+    }
+    try { localStorage.setItem(MINUTES_KEY, JSON.stringify(minutes)); } catch {}
+    send({ cmd: 'start', minutes });
+  });
+  stopBtn.addEventListener('click', () => send({ cmd: 'stop' }));
+  resetBtn.addEventListener('click', () => send({ cmd: 'reset' }));
+  clearBtn.addEventListener('click', () => {
+    if (confirm('Clear the timer history?')) send({ cmd: 'clearHistory' });
+  });
+
+  function renderControls() {
+    const connected = !!state;
+    const active = connected && !!state.triggers;  // running or paused
+    startBtn.disabled = !connected || state.running;
+    startBtn.textContent = active && !state.running ? 'Resume' : 'Start';
+    stopBtn.disabled = !connected || !state.running;
+    resetBtn.disabled = !connected;
+    clearBtn.disabled = !connected || !state.history || !state.history.length;
+    Object.entries(inputs).forEach(([k, el]) => {
+      el.disabled = !connected || active;
+      if (active) el.value = +(state.triggers[k] / 60000).toFixed(2);  // show the running timer's settings
+    });
+
+    const history = (state && state.history) || [];
+    historyBody.innerHTML = history.length
+      ? history.map((h, i) => `<tr><td>${i + 1}</td><td>${fmtDuration(h.ms)}</td><td>${escapeHtml(h.stoppedAt)}</td></tr>`)
+          .reverse().join('')
+      : '<tr><td colspan="3" class="empty">No timers yet.</td></tr>';
+  }
+
+  // --- Connect straight to the timer screen whose pairing code is in the QR link (?id=...) ---
+
   const timerId = new URLSearchParams(location.search).get('id');
   let peer = null;
   let conn = null;
@@ -61,7 +194,8 @@
 
   function retry() {
     if (retryTimer) return;  // close and error often fire together; retry once
-    server = null;
+    state = null;
+    renderControls();
     statusEl.textContent = 'Lost connection to the timer. Reconnecting…';
     retryTimer = setTimeout(() => { retryTimer = null; connect(); }, 3000);
   }
@@ -72,8 +206,9 @@
     const c = conn = peer.connect(timerId, { reliable: true });
     if (old) old.close();
     c.on('data', data => {
-      server = data;
+      state = data;
       receivedAt = performance.now();
+      renderControls();
     });
     c.on('close', () => { if (c === conn) retry(); });  // ignore the old connection closing
     c.on('error', () => { if (c === conn) retry(); });
@@ -87,7 +222,7 @@
     peer = new Peer();
     peer.on('open', connect);
     peer.on('error', err => {
-      // 'peer-unavailable' means the timer page isn't open (yet), so keep trying.
+      // 'peer-unavailable' means the timer screen isn't open (yet), so keep trying.
       if (err.type === 'peer-unavailable') retry();
       else statusEl.textContent = 'Can’t reach the pairing service. Retrying…';
     });
@@ -95,14 +230,15 @@
   }
 
   function render() {
-    if (!server) return;
-    const elapsed = server.elapsedMs + (server.running ? performance.now() - receivedAt : 0);
+    if (!state) return;
+    const elapsed = state.elapsedMs + (state.running ? performance.now() - receivedAt : 0);
     timeEl.textContent = fmtDuration(elapsed);
-    statusEl.textContent = server.running ? '' : (server.triggers ? 'Paused' : 'Waiting to start');
-    const phase = server.running ? phaseAt(elapsed, server.triggers) : null;
+    statusEl.textContent = state.running ? '' : (state.triggers ? 'Paused' : 'Ready – set the minutes and press Start');
+    const phase = state.running ? phaseAt(elapsed, state.triggers) : null;
     document.body.className = phase ? 'phase-' + phase : '';
   }
 
+  renderControls();
   setInterval(render, 100);
 </script>
 </body>

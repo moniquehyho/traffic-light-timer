@@ -6,163 +6,61 @@
 <title>Traffic Light Timer</title>
 <style>
   * { box-sizing: border-box; }
+  html, body { height: 100%; }
   body {
     margin: 0;
-    height: 100vh;
     font-family: system-ui, -apple-system, "Segoe UI", sans-serif;
     background: #1e1e24;
     color: #f2f2f2;
-    display: flex;
-    flex-direction: column;
     transition: background 0.3s;
+    overflow: hidden;
   }
-  main {
-    flex: 1;
-    min-height: 0;
-    display: flex;
-    flex-direction: column;
-    align-items: center;
-    justify-content: center;
-    gap: 16px;
-    padding: 24px;
-  }
-  .panel {
-    display: flex;
-    justify-content: center;
-    align-items: flex-start;
-    gap: 24px;
-    padding: 12px 16px;
-    background: rgba(0, 0, 0, 0.25);
-    font-size: 0.9rem;
-  }
-  .settings { display: flex; flex-direction: column; gap: 10px; flex: 0 1 560px; min-width: 210px; }
-  .field { display: flex; align-items: center; gap: 6px; white-space: nowrap; }
-  .field label { width: 4.8em; text-align: right; }
-  .settings .controls:not(.fields) { flex-wrap: nowrap; }
-  .controls {
-    display: flex;
-    gap: 12px;
-    flex-wrap: wrap;
-    justify-content: center;
-    align-items: center;
-  }
-  input, button {
-    font-size: 1rem;
-    padding: 8px 14px;
-    border-radius: 8px;
-    border: 1px solid #555;
-    background: #2c2c34;
-    color: inherit;
-  }
-  input[type="number"] { width: 4.5em; }
-  button { cursor: pointer; }
-  button:hover { background: #3a3a44; }
-  button:disabled { opacity: 0.4; cursor: default; }
-  button.primary { background: #2563eb; border-color: #2563eb; }
-  button.primary:hover { background: #1d4ed8; }
-  button.stop { background: #b91c1c; border-color: #b91c1c; }
-  button.stop:hover { background: #991b1b; }
-  #status { font-size: 0.9rem; color: #aaa; min-height: 1.5em; text-align: center; }
-  #elapsed { font-size: 6rem; font-weight: 600; font-variant-numeric: tabular-nums; min-height: 1.2em; }
-
   body.phase-green { background: #0f3d1d; }
   body.phase-amber { background: #4a3300; }
   body.phase-red   { background: #4a0f0f; }
 
   .pair {
-    flex: 0 0 auto;
-    max-width: 170px;
-    display: none;
+    position: fixed;
+    right: 16px;
+    bottom: 16px;
+    display: flex;
     flex-direction: column;
     align-items: center;
-    gap: 8px;
+    gap: 6px;
+    font-size: 0.75rem;
+    color: #aaa;
     text-align: center;
   }
-  .pair.show { display: flex; }
   #qr { width: 110px; height: 110px; background: #fff; padding: 6px; border-radius: 6px; }
   #qr svg { display: block; width: 100%; height: 100%; }
-  .pair small { color: #aaa; word-break: break-all; }
-
-  .history {
-    flex: 0 1 320px;
-    min-width: 150px;
-    max-height: 170px;
-    overflow-y: auto;
-  }
-  .history-head { display: flex; justify-content: space-between; align-items: center; margin-bottom: 4px; }
-  .history h2 { margin: 0; font-size: 1rem; }
-  .history button { font-size: 0.9rem; padding: 6px 12px; }
-  .history table { width: 100%; border-collapse: collapse; font-variant-numeric: tabular-nums; }
-  .history th, .history td { text-align: left; padding: 4px; border-bottom: 1px solid rgba(255, 255, 255, 0.12); }
-  .history th { color: #aaa; font-weight: 500; }
-  .history .empty { color: #888; padding: 6px 4px; }
 </style>
 <script src="https://cdn.jsdelivr.net/npm/peerjs@1.5.4/dist/peerjs.min.js"></script>
 <script src="https://cdn.jsdelivr.net/npm/qrcode-generator@1.4.4/qrcode.min.js"></script>
 </head>
-<body>
-  <main>
-    <div id="elapsed"></div>
-  </main>
-
-  <div class="panel">
-  <div class="settings">
-    <div class="controls fields">
-      <div class="field"><label for="greenMins" style="color:#22dd55">Green at</label>
-        <input type="number" id="greenMins" min="0" step="any" value="5"><span>min</span></div>
-      <div class="field"><label for="amberMins" style="color:#ffb000">Amber at</label>
-        <input type="number" id="amberMins" min="0" step="any" value="6"><span>min</span></div>
-      <div class="field"><label for="redMins" style="color:#ff2a2a">Red at</label>
-        <input type="number" id="redMins" min="0" step="any" value="7"><span>min</span></div>
-    </div>
-    <div class="controls">
-      <button class="primary" id="startBtn">Start</button>
-      <button class="stop" id="stopBtn" disabled>Stop</button>
-      <button id="resetBtn">Reset</button>
-    </div>
-    <div id="status">Set the minutes for each colour and press Start.</div>
-  </div>
-
-  <div class="pair" id="pair">
-    <div>Scan to watch the timer on your phone</div>
-    <div id="qr" role="img" aria-label="QR code for the phone view"></div>
-    <small id="pairStatus">Setting up pairing…</small>
-  </div>
-
-  <div class="history">
-    <div class="history-head">
-      <h2>Timer history</h2>
-      <button id="clearHistoryBtn">Clear</button>
-    </div>
-    <table>
-      <thead><tr><th>#</th><th>Timer</th><th>Stopped at</th></tr></thead>
-      <tbody id="historyBody"></tbody>
-    </table>
-  </div>
+<body title="Double-click for full screen">
+  <div class="pair">
+    <div id="qr" role="img" aria-label="QR code to control the timer from your phone"></div>
+    <div id="pairStatus">Setting up pairing…</div>
   </div>
 
 <script>
+  // This screen only shows the colours. Phones paired by the QR code control the timer:
+  // they send commands here, and this page sends the timer state back to every phone.
   const FLASH_MS = 6000;          // how long green and amber show
   const HISTORY_KEY = 'trafficLightTimerHistory';
-
-  const statusEl = document.getElementById('status');
-  const elapsedEl = document.getElementById('elapsed');  const startBtn = document.getElementById('startBtn');
-  const stopBtn = document.getElementById('stopBtn');
-  const inputs = ['greenMins', 'amberMins', 'redMins'].map(id => document.getElementById(id));
-  const historyBody = document.getElementById('historyBody');
+  const PEER_ID_KEY = 'trafficLightTimerPeerId';
+  const PHONE_PAGE = location.hostname.endsWith('github.io')
+    ? new URL('remote.html', location.href).href
+    : 'https://moniquehyho.github.io/traffic-light-timer/remote.html';
 
   let triggers = null;     // { green, amber, red } in ms from start
   let accumulated = 0;     // ms counted before the current run
   let startedAt = null;    // timestamp of current run, null when paused
   let currentEntry = null; // index of this timer's history entry (updated on resume + stop)
-  let history = JSON.parse(localStorage.getItem(HISTORY_KEY) || '[]');
+  let history = [];
+  try { history = JSON.parse(localStorage.getItem(HISTORY_KEY) || '[]'); } catch {}
 
   function pad(n) { return String(n).padStart(2, '0'); }
-  function fmtDuration(ms) {
-    const secs = Math.floor(ms / 1000);
-    const hh = Math.floor(secs / 3600), mm = Math.floor(secs % 3600 / 60), ss = secs % 60;
-    return hh ? `${hh}:${pad(mm)}:${pad(ss)}` : `${pad(mm)}:${pad(ss)}`;
-  }
   function fmtClock(d) { return `${pad(d.getHours())}:${pad(d.getMinutes())}:${pad(d.getSeconds())}`; }
 
   function elapsed() {
@@ -180,33 +78,67 @@
     return null;
   }
 
-  function renderHistory() {
-    localStorage.setItem(HISTORY_KEY, JSON.stringify(history));
-    if (!history.length) {
-      historyBody.innerHTML = '<tr><td colspan="3" class="empty">No timers yet.</td></tr>';
-      return;
-    }
-    historyBody.innerHTML = history
-      .map((h, i) => `<tr><td>${i + 1}</td><td>${fmtDuration(h.ms)}</td><td>${h.stoppedAt}</td></tr>`)
-      .reverse()
-      .join('');
+  function saveHistory() {
+    try { localStorage.setItem(HISTORY_KEY, JSON.stringify(history)); } catch {}
   }
 
-  // Phone pairing: phones connect straight to this page over WebRTC (PeerJS). PeerJS's free
-  // public server only introduces the two devices; timer updates go device to device.
-  const PEER_ID_KEY = 'trafficLightTimerPeerId';
-  const PHONE_PAGE = location.hostname.endsWith('github.io')
-    ? new URL('remote.html', location.href).href
-    : 'https://moniquehyho.github.io/traffic-light-timer/remote.html';
-  const pairEl = document.getElementById('pair');
+  // --- Timer commands (sent by phones) ---
+
+  function start(minutes) {
+    if (startedAt) return;
+    if (!triggers) {
+      const { green, amber, red } = minutes || {};
+      if (![green, amber, red].every(v => typeof v === 'number' && v >= 0)) return;
+      triggers = { green: green * 60000, amber: amber * 60000, red: red * 60000 };
+      accumulated = 0;
+      currentEntry = null;
+    }
+    startedAt = Date.now();
+  }
+
+  function stop() {
+    if (!startedAt) return;
+    accumulated = elapsed();
+    startedAt = null;
+    setPhase(null);
+    const entry = { ms: accumulated, stoppedAt: fmtClock(new Date()) };
+    if (currentEntry === null) {
+      history.push(entry);
+      currentEntry = history.length - 1;
+    } else {
+      history[currentEntry] = entry;
+    }
+    saveHistory();
+  }
+
+  function reset() {
+    triggers = null;
+    accumulated = 0;
+    startedAt = null;
+    currentEntry = null;
+    setPhase(null);
+  }
+
+  function handleCommand(msg) {
+    if (!msg || typeof msg !== 'object') return;
+    if (msg.cmd === 'start') start(msg.minutes);
+    else if (msg.cmd === 'stop') stop();
+    else if (msg.cmd === 'reset') reset();
+    else if (msg.cmd === 'clearHistory') { history = []; saveHistory(); }
+    syncPhones();
+  }
+
+  // --- Phone pairing over WebRTC (PeerJS). PeerJS's free public server only introduces the
+  // devices; commands and timer updates go device to device. ---
+
   const pairStatusEl = document.getElementById('pairStatus');
   const phones = new Set();
   let peer = null;
 
   function stateMessage() {
-    return { running: !!startedAt, elapsedMs: elapsed(), triggers };
+    return { running: !!startedAt, elapsedMs: elapsed(), triggers, history };
   }
-  function syncPhone() {
+  function syncPhones() {
     const msg = stateMessage();
     phones.forEach(conn => { if (conn.open) conn.send(msg); });
   }
@@ -214,7 +146,7 @@
   function showPhoneCount() {
     pairStatusEl.textContent = phones.size
       ? `${phones.size} phone${phones.size > 1 ? 's' : ''} connected`
-      : 'No phones connected';
+      : 'Scan to control the timer';
   }
 
   function newPeerId() {
@@ -228,7 +160,7 @@
     }
     peer = new Peer(id);
     peer.on('open', peerId => {
-      localStorage.setItem(PEER_ID_KEY, peerId);  // same QR after a reload, so phones reconnect
+      try { localStorage.setItem(PEER_ID_KEY, peerId); } catch {}  // same QR after a reload, so phones reconnect
       const qr = qrcode(0, 'M');
       qr.addData(`${PHONE_PAGE}?id=${peerId}`);
       qr.make();
@@ -241,6 +173,7 @@
         conn.send(stateMessage());
         showPhoneCount();
       });
+      conn.on('data', handleCommand);
       conn.on('close', () => { phones.delete(conn); showPhoneCount(); });
       conn.on('error', () => { phones.delete(conn); showPhoneCount(); });
     });
@@ -258,81 +191,19 @@
     });
   }
 
-  pairEl.classList.add('show');
-  startPairing(localStorage.getItem(PEER_ID_KEY) || newPeerId());
-  setInterval(syncPhone, 5000);  // regular refresh keeps phones in step
-
-  function start() {
-    if (startedAt) return;
-    if (!triggers) {
-      const [g, a, r] = inputs.map(i => parseFloat(i.value));
-      if (![g, a, r].every(v => v >= 0)) {
-        statusEl.textContent = 'Please enter minutes (0 or more) for each colour.';
-        return;
-      }
-      triggers = { green: g * 60000, amber: a * 60000, red: r * 60000 };
-      accumulated = 0;
-      currentEntry = null;
-    }
-    startedAt = Date.now();
-    elapsedEl.textContent = '';
-    statusEl.textContent = '';
-    startBtn.disabled = true;
-    stopBtn.disabled = false;
-    inputs.forEach(i => i.disabled = true);
-    syncPhone();
-  }
-
-  function stop() {
-    if (!startedAt) return;
-    accumulated = elapsed();
-    startedAt = null;
-    setPhase(null);
-    elapsedEl.textContent = fmtDuration(accumulated);
-    statusEl.textContent = 'Paused — press Resume to continue or Reset for a new timer.';
-    startBtn.textContent = 'Resume';
-    startBtn.disabled = false;
-    stopBtn.disabled = true;
-
-    const entry = { ms: accumulated, stoppedAt: fmtClock(new Date()) };
-    if (currentEntry === null) {
-      history.push(entry);
-      currentEntry = history.length - 1;
-    } else {
-      history[currentEntry] = entry;
-    }
-    renderHistory();
-    syncPhone();
-  }
-
-  function reset() {
-    triggers = null;
-    accumulated = 0;
-    startedAt = null;
-    currentEntry = null;
-    setPhase(null);
-    elapsedEl.textContent = '';
-    statusEl.textContent = 'Set the minutes for each colour and press Start.';
-    startBtn.textContent = 'Start';
-    startBtn.disabled = false;
-    stopBtn.disabled = true;
-    inputs.forEach(i => i.disabled = false);
-    syncPhone();
-  }
-
-  startBtn.addEventListener('click', start);
-  stopBtn.addEventListener('click', stop);
-  document.getElementById('resetBtn').addEventListener('click', reset);
-  document.getElementById('clearHistoryBtn').addEventListener('click', () => {
-    history = [];
-    renderHistory();
-  });
+  let savedId = null;
+  try { savedId = localStorage.getItem(PEER_ID_KEY); } catch {}
+  startPairing(savedId || newPeerId());
+  setInterval(syncPhones, 5000);  // regular refresh keeps phones in step
 
   setInterval(() => {
     if (startedAt) setPhase(phaseAt(elapsed()));
   }, 100);
 
-  renderHistory();
+  document.body.addEventListener('dblclick', () => {
+    if (document.fullscreenElement) document.exitFullscreen();
+    else document.documentElement.requestFullscreen().catch(() => {});
+  });
 </script>
 </body>
 </html>
